@@ -1,3 +1,5 @@
+// Rotas relacionadas à saúde da API (health check)
+
 import { Router } from 'express';
 import { healthCheck } from '../controllers/health.controller.js';
 
