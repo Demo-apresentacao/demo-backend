@@ -74,3 +74,4 @@ Resposta esperada:
   "status": "ok",
   "message": "API is running"
 }
+
