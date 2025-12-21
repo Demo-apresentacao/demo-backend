@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// 🔗 Inicializa conexão com o banco
+// Inicializa conexão com o banco
 import './config/db.js';
 
 const app = express();
@@ -17,10 +17,11 @@ app.use(express.json());
 // Rotas
 import healthRoutes from './routes/health.routes.js';
 import usersRoutes from './routes/users.routes.js';
+import vehiclesRoutes from './routes/vehicles.routes.js';
 
 app.use('/health', healthRoutes);
 app.use('/users', usersRoutes);
-
+app.use('/vehicles', vehiclesRoutes);
 
 // Middleware de erro
 import { errorHandler } from './middlewares/error.middleware.js';

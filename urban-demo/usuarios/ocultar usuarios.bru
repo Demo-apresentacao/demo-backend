@@ -1,0 +1,22 @@
+meta {
+  name: ocultar usuarios
+  type: http
+  seq: 5
+}
+
+patch {
+  url: http://localhost:3000/users/10/status
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "usu_situacao": 1
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

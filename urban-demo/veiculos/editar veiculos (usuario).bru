@@ -1,0 +1,27 @@
+meta {
+  name: editar veiculos (usuario)
+  type: http
+  seq: 5
+}
+
+patch {
+  url: http://localhost:3000/vehicles/user/3
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "mod_id": 3,
+    "veic_placa": "abc1d23",
+    "veic_ano": "2020",
+    "veic_cor": "Preto",
+    "veic_combustivel": "Gasolina",
+    "veic_observ": "Atualizado pelo usuário"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
