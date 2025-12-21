@@ -3,8 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-dotenv.config();
-
+// Só carrega .env se NÃO for produção
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+  }
 // Inicializa conexão com o banco
 import './config/db.js';
 
