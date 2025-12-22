@@ -1,0 +1,22 @@
+meta {
+  name: habilita ou desabilitada um disponibilidade
+  type: http
+  seq: 4
+}
+
+patch {
+  url: http://localhost:3000/availability/status/12
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "disp_situacao": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

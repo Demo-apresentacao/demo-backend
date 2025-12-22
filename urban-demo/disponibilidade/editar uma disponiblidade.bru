@@ -1,0 +1,27 @@
+meta {
+  name: editar uma disponiblidade
+  type: http
+  seq: 3
+}
+
+patch {
+  url: http://localhost:3000/availability/12
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+        "disp_id": 1,
+        "disp_dia": "SEG",
+        "disp_periodo": 1,
+        "disp_hr_ini": "18:00:00",
+        "disp_hr_fin": "20:00:00",
+        "disp_situacao": true
+      }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

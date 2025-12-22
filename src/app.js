@@ -5,8 +5,9 @@ import dotenv from 'dotenv';
 
 // Só carrega .env se NÃO for produção
 if (process.env.NODE_ENV !== 'production') {
-    dotenv.config();
-  }
+  dotenv.config();
+}
+
 // Inicializa conexão com o banco
 import './config/db.js';
 
@@ -21,13 +22,17 @@ import healthRoutes from './routes/health.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import vehiclesRoutes from './routes/vehicles.routes.js';
 import servicesRoutes from './routes/services.routes.js';
+import availabilityRoutes from './routes/availability.routes.js';
+import unavailabilityRoutes from './routes/unavailability.routes.js';
 
-app.use('/health', healthRoutes);
-app.use('/users', usersRoutes);
-app.use('/vehicles', vehiclesRoutes);
-app.use('/services', servicesRoutes);
+app.use('/health', healthRoutes); // Health check da API
+app.use('/users', usersRoutes); // Usuários
+app.use('/vehicles', vehiclesRoutes); // Veículos
+app.use('/services', servicesRoutes); // Serviços
+app.use('/availability', availabilityRoutes); // Disponibilidade
+app.use('/unavailability', unavailabilityRoutes); // Indisponibilidade
 
-// Middleware de erro
+// Middleware global de erro
 import { errorHandler } from './middlewares/error.middleware.js';
 app.use(errorHandler);
 
