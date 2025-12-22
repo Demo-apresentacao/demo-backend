@@ -1,0 +1,16 @@
+meta {
+  name: exclui um serviço da agenda
+  type: http
+  seq: 4
+}
+
+delete {
+  url: http://localhost:3000/agenda-services/4
+  body: json
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

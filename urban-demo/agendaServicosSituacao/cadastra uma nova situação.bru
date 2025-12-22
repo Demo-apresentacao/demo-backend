@@ -1,0 +1,22 @@
+meta {
+  name: cadastra uma nova situação
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/agenda-services-status
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "agend_serv_situ_nome": "Aguardando Atendimento"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

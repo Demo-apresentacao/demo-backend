@@ -1,0 +1,16 @@
+meta {
+  name: lista todas as situações da agenda de serviços
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost:3000/agenda-services-status
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
