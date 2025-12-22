@@ -1,0 +1,27 @@
+meta {
+  name: criar novo serviço
+  type: http
+  seq: 5
+}
+
+post {
+  url: http://localhost:3000/services
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cat_serv_id": 1,
+    "serv_nome": "Teste da premium",
+    "serv_duracao": "01:30:00",
+    "serv_preco": 100.00,
+    "serv_descricao": "Teste premium",
+    "serv_situacao": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

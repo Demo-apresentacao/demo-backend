@@ -20,10 +20,12 @@ app.use(express.json());
 import healthRoutes from './routes/health.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import vehiclesRoutes from './routes/vehicles.routes.js';
+import servicesRoutes from './routes/services.routes.js';
 
 app.use('/health', healthRoutes);
 app.use('/users', usersRoutes);
 app.use('/vehicles', vehiclesRoutes);
+app.use('/services', servicesRoutes);
 
 // Middleware de erro
 import { errorHandler } from './middlewares/error.middleware.js';

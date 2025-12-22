@@ -1,0 +1,16 @@
+meta {
+  name: excluir serviço
+  type: http
+  seq: 7
+}
+
+delete {
+  url: http://localhost:3000/services/41
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,22 @@
+meta {
+  name: ativar ou desativar um serviço
+  type: http
+  seq: 6
+}
+
+patch {
+  url: http://localhost:3000/services/1/status
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "serv_situacao": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
