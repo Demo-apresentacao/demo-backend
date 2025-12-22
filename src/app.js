@@ -24,6 +24,7 @@ import vehiclesRoutes from './routes/vehicles.routes.js';
 import servicesRoutes from './routes/services.routes.js';
 import availabilityRoutes from './routes/availability.routes.js';
 import unavailabilityRoutes from './routes/unavailability.routes.js';
+import vehicleUsersRoutes from './routes/vehicleUsers.routes.js';
 
 app.use('/health', healthRoutes); // Health check da API
 app.use('/users', usersRoutes); // Usuários
@@ -31,6 +32,7 @@ app.use('/vehicles', vehiclesRoutes); // Veículos
 app.use('/services', servicesRoutes); // Serviços
 app.use('/availability', availabilityRoutes); // Disponibilidade
 app.use('/unavailability', unavailabilityRoutes); // Indisponibilidade
+app.use('/vehicle-users', vehicleUsersRoutes); // Associação veículo-usuário
 
 // Middleware global de erro
 import { errorHandler } from './middlewares/error.middleware.js';

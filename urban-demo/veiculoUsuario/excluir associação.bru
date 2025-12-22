@@ -1,0 +1,24 @@
+meta {
+  name: excluir associação
+  type: http
+  seq: 6
+}
+
+delete {
+  url: http://localhost:3000/vehicle-users/2
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "data_inicial": "2024-01-10",
+    "data_final": "2024-06-30",
+    "ehproprietario": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
