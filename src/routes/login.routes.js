@@ -7,6 +7,6 @@ const router = Router();
  * POST /auth/login
  * Realiza o login do usuário
  */
-router.post('/login', login);
+router.post('/', login);
 
 export default router;
