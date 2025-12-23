@@ -18,7 +18,7 @@ export const login = async (req, res, next) => {
           usu_role
         FROM usuarios
         WHERE usu_email = $1
-          AND usu_password = $2
+          AND usu_senha = $2
         LIMIT 1;
       `;
   
