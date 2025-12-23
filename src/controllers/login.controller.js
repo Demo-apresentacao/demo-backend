@@ -15,7 +15,7 @@ export const login = async (req, res, next) => {
           usu_id,
           usu_name,
           usu_email,
-          usu_role
+          usu_acesso
         FROM usuarios
         WHERE usu_email = $1
           AND usu_senha = $2
