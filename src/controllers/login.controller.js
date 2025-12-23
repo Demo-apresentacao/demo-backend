@@ -12,13 +12,13 @@ export const login = async (req, res, next) => {
   
       const query = `
         SELECT
-          user_id,
-          user_name,
-          user_email,
-          user_role
-        FROM users
-        WHERE user_email = $1
-          AND user_password = $2
+          usu_id,
+          usu_name,
+          usu_email,
+          usu_role
+        FROM usuarios
+        WHERE usu_email = $1
+          AND usu_password = $2
         LIMIT 1;
       `;
   
@@ -39,7 +39,8 @@ export const login = async (req, res, next) => {
       });
   
     } catch (error) {
-      next(error);
+      console.log("Erro no login:", error);
+        next(error);
     }
   };
   
