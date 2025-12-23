@@ -1,0 +1,28 @@
+meta {
+  name: criar agendamento
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/agendamentos
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "veic_usu_id": 1,
+    "agend_data": "2025-01-15",
+    "agend_horario": "10:00:00",
+    "agend_situacao": 1,
+    "agend_observ": "Troca de óleo e revisão básica",
+    "serv_id": 2,
+    "agend_serv_situ_id": 1
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
