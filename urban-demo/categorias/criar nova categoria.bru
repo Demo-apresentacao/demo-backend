@@ -1,0 +1,23 @@
+meta {
+  name: criar nova categoria
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/categories
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cat_nome": "Caminhonete",
+    "cat_icone": "tools"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

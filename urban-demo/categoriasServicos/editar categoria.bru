@@ -1,0 +1,22 @@
+meta {
+  name: editar categoria
+  type: http
+  seq: 3
+}
+
+put {
+  url: http://localhost:3000/service-categories/11
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cat_serv_nome": "Manutenção Corretiva"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,22 @@
+meta {
+  name: criar nova categoria
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/service-categories
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cat_serv_nome": "Serviços Preventivos Teste"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
