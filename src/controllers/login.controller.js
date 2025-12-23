@@ -40,7 +40,7 @@ export const login = async (req, res, next) => {
     return res
       .cookie('logged', 'true', {
         httpOnly: false,      // middleware precisa ler
-        sameSite: 'lax',
+        sameSite: 'none',
         secure: true,         // HTTPS (Render + Vercel)
       })
       .cookie(
