@@ -15,7 +15,9 @@ const app = express();
 
 // Middlewares globais
 app.use(cors({
-  origin: 'https://urban-front-2.vercel.app',
+  origin: 'https://urban-front-2.vercel.app', // Sua URL da Vercel
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
 

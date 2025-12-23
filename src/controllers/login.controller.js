@@ -4,7 +4,7 @@ export const login = async (req, res, next) => {
   try {
     const { usu_email, usu_senha } = req.body;
 
-    // Validação básica
+    // 1. Validação básica de entrada
     if (!usu_email || !usu_senha) {
       return res.status(400).json({
         status: 'error',
@@ -12,21 +12,23 @@ export const login = async (req, res, next) => {
       });
     }
 
+    // 2. Consulta ao banco de dados (Neon Tech)
     const query = `
-      SELECT
-        usu_id,
-        usu_nome,
-        usu_email,
-        usu_acesso
-      FROM usuarios
-      WHERE usu_email = $1
-        AND usu_senha = $2
+      SELECT 
+        usu_id, 
+        usu_nome, 
+        usu_email, 
+        usu_acesso 
+      FROM usuarios 
+      WHERE usu_email = $1 
+        AND usu_senha = $2 
       LIMIT 1;
     `;
 
     const values = [usu_email, usu_senha];
     const result = await pool.query(query, values);
 
+    // 3. Verifica se o usuário existe
     if (result.rowCount === 0) {
       return res.status(401).json({
         status: 'error',
@@ -36,30 +38,26 @@ export const login = async (req, res, next) => {
 
     const usuario = result.rows[0];
 
-    // 🔥 AQUI ESTÁ A PARTE QUE FALTAVA
-    return res
-      .cookie('logged', 'true', {
-        httpOnly: false,      // middleware precisa ler
-        sameSite: 'none',
-        secure: true,         // HTTPS (Render + Vercel)
-      })
-      .cookie(
-        'role',
-        usuario.usu_acesso ? 'admin' : 'user',
-        {
-          httpOnly: false,
-          sameSite: 'none',
-          secure: true,
-        }
-      )
-      .json({
-        status: 'success',
-        message: 'Login realizado com sucesso.',
-        data: usuario
-      });
+    // 4. RESPOSTA SIMPLIFICADA
+    // Removemos o .cookie() daqui, pois o frontend cuidará disso.
+    // Isso evita problemas de CORS e políticas de SameSite:None.
+    return res.status(200).json({
+      status: 'success',
+      message: 'Login realizado com sucesso.',
+      data: {
+        usu_id: usuario.usu_id,
+        usu_nome: usuario.usu_nome,
+        usu_email: usuario.usu_email,
+        usu_acesso: usuario.usu_acesso // Booleano: true para admin, false para user
+      }
+    });
 
   } catch (error) {
-    console.log("Erro no login:", error);
-    next(error);
+    console.error("Erro no login:", error);
+    // É importante passar o erro para o middleware de erro do Express
+    res.status(500).json({
+        status: 'error',
+        message: 'Erro interno no servidor.'
+    });
   }
 };
