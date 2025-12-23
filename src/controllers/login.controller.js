@@ -48,7 +48,7 @@ export const login = async (req, res, next) => {
         usuario.usu_acesso ? 'admin' : 'user',
         {
           httpOnly: false,
-          sameSite: 'lax',
+          sameSite: 'none',
           secure: true,
         }
       )
