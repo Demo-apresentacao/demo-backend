@@ -32,6 +32,7 @@ import categoriesRoutes from './routes/categories.routes.js';
 import serviceCategoriesRoutes from './routes/serviceCategories.routes.js';
 import brandsRoutes from './routes/brands.routes.js';
 import modelsRoutes from './routes/models.routes.js';
+import loginRoutes from './routes/login.routes.js';
 
 app.use('/health', healthRoutes); // Health check da API
 app.use('/users', usersRoutes); // Usuários
@@ -47,6 +48,7 @@ app.use('/categories', categoriesRoutes); // Categorias
 app.use('/service-categories', serviceCategoriesRoutes); // Categorias de serviços
 app.use('/brands', brandsRoutes); // Marcas
 app.use('/models', modelsRoutes); // Modelos
+app.use('/login', loginRoutes); // Autenticação
 
 // Middleware global de erro
 import { errorHandler } from './middlewares/error.middleware.js';
