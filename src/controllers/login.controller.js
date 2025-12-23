@@ -1,3 +1,5 @@
+import pool from '../config/db.js';
+
 export const login = async (req, res, next) => {
     try {
       const { usu_email, usu_senha } = req.body;
@@ -13,7 +15,7 @@ export const login = async (req, res, next) => {
       const query = `
         SELECT
           usu_id,
-          usu_name,
+          usu_nome,
           usu_email,
           usu_acesso
         FROM usuarios
