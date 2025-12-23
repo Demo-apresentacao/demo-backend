@@ -30,6 +30,8 @@ import agendaServiceStatusRoutes from './routes/agendaServiceStatus.routes.js';
 import agendamentosRoutes from './routes/agendamentos.routes.js';
 import categoriesRoutes from './routes/categories.routes.js';
 import serviceCategoriesRoutes from './routes/serviceCategories.routes.js';
+import brandsRoutes from './routes/brands.routes.js';
+import modelsRoutes from './routes/models.routes.js';
 
 app.use('/health', healthRoutes); // Health check da API
 app.use('/users', usersRoutes); // Usuários
@@ -43,6 +45,8 @@ app.use('/agenda-services-status', agendaServiceStatusRoutes); // Situações da
 app.use('/agendamentos', agendamentosRoutes); // Agendamentos
 app.use('/categories', categoriesRoutes); // Categorias
 app.use('/service-categories', serviceCategoriesRoutes); // Categorias de serviços
+app.use('/brands', brandsRoutes); // Marcas
+app.use('/models', modelsRoutes); // Modelos
 
 // Middleware global de erro
 import { errorHandler } from './middlewares/error.middleware.js';

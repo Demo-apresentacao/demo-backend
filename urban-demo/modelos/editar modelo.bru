@@ -1,0 +1,25 @@
+meta {
+  name: editar modelo
+  type: http
+  seq: 5
+}
+
+patch {
+  url: http://localhost:3000/models/2431
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "mod_nome": "Teste silva",
+    "mod_cod": 4,
+    "mar_cod": 4,
+    "mar_id": 1
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
