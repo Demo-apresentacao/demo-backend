@@ -14,7 +14,11 @@ import './config/db.js';
 const app = express();
 
 // Middlewares globais
-app.use(cors());
+app.use(cors({
+  origin: 'https://urban-front-2.vercel.app',
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // Rotas
