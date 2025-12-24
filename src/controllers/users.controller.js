@@ -4,9 +4,9 @@ import pool from '../config/db.js';
 //  Lista todos os usuários (com opção de filtro ?search=texto)
 export const listUsers = async (req, res, next) => {
   try {
-    // 1. Captura o parâmetro de busca da URL
     const { search } = req.query;
 
+    // 1. INÍCIO DA QUERY (Mudei para template string com quebra de linha para garantir espaço)
     let queryText = `
       SELECT 
         usu_id, 
@@ -19,28 +19,37 @@ export const listUsers = async (req, res, next) => {
         usu_observ, 
         usu_acesso, 
         usu_situacao 
-      FROM usuarios`;
+      FROM usuarios`
+    ; 
 
     const values = [];
 
-    // 2. Se houver busca, adiciona o WHERE dinamicamente
+    // 2. CONCATENAÇÃO (Note o espaço no início da string " WHERE...")
     if (search) {
-      // ILIKE faz a busca ignorando maiúsculas/minúsculas (PostgreSQL)
-      queryText +=  `WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1`
+      queryText +=  ` WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1`;
       values.push(`%${search}%`);
     }
 
-    // 3. Adiciona a ordenação no final
-    queryText +=  `ORDER BY usu_id`;
+    // 3. ORDENAÇÃO (Note o espaço no início da string " ORDER BY...")
+    queryText +=  ` ORDER BY usu_id DESC`;
 
-    // 4. Executa a query passando os valores (se houver)
+    // --- DEBUG ---
+    // Olhe no seu terminal onde roda o servidor. Isso vai mostrar a query montada.
+    console.log("SQL GERADO:", queryText);
+    console.log("VALORES:", values);
+    // -------------
+
+    // 4. EXECUÇÃO
     const result = await pool.query(queryText, values);
 
-    return res.json({
+    return res.status(200).json({
       status: 'success',
       data: result.rows
     });
+
   } catch (error) {
+    console.error("ERRO DETALHADO:", error);
+    // Passa o erro para o próximo middleware
     next(error);
   }
 };
