@@ -1,27 +1,40 @@
 import pool from '../config/db.js';
-
-//  GET /users
-//  Lista todos os usuários
  
+//  GET /users
+//  Lista todos os usuários (com opção de filtro ?search=texto)
 export const listUsers = async (req, res, next) => {
   try {
-    const query = `
-      SELECT
-        usu_id,
-        usu_nome,
-        usu_cpf,
-        usu_data_nasc,
-        usu_sexo,
-        usu_telefone,
-        usu_email,
-        usu_observ,
-        usu_acesso,
-        usu_situacao
-      FROM usuarios
-      ORDER BY usu_id;
-    `;
+    // 1. Captura o parâmetro de busca da URL
+    const { search } = req.query;
 
-    const result = await pool.query(query);
+    let queryText = `
+      SELECT 
+        usu_id, 
+        usu_nome, 
+        usu_cpf, 
+        usu_data_nasc, 
+        usu_sexo, 
+        usu_telefone, 
+        usu_email, 
+        usu_observ, 
+        usu_acesso, 
+        usu_situacao 
+      FROM usuarios;`;
+
+    const values = [];
+
+    // 2. Se houver busca, adiciona o WHERE dinamicamente
+    if (search) {
+      // ILIKE faz a busca ignorando maiúsculas/minúsculas (PostgreSQL)
+      queryText +=  `WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1;`
+      values.push(`%${search}%`);
+    }
+
+    // 3. Adiciona a ordenação no final
+    queryText +=  `ORDER BY usu_id;`;
+
+    // 4. Executa a query passando os valores (se houver)
+    const result = await pool.query(queryText, values);
 
     return res.json({
       status: 'success',
@@ -31,7 +44,6 @@ export const listUsers = async (req, res, next) => {
     next(error);
   }
 };
-
 
 //  GET /users/:id
 //  Busca os dados de um usuário pelo ID
