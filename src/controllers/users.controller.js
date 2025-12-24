@@ -4,52 +4,59 @@ import pool from '../config/db.js';
 //  Lista todos os usuários (com opção de filtro ?search=texto)
 export const listUsers = async (req, res, next) => {
   try {
-    const { search } = req.query;
+    const { search, page = 1, limit = 10 } = req.query; // Padrão: pág 1, 10 itens
 
-    // 1. INÍCIO DA QUERY (Mudei para template string com quebra de linha para garantir espaço)
+    // Calcula onde começar no banco (Offset)
+    const offset = (page - 1) * limit;
+
+    // 1. Query para pegar os DADOS
     let queryText = `
-      SELECT 
-        usu_id, 
-        usu_nome, 
-        usu_cpf, 
-        usu_data_nasc, 
-        usu_sexo, 
-        usu_telefone, 
-        usu_email, 
-        usu_observ, 
-        usu_acesso, 
-        usu_situacao 
-      FROM usuarios`
-    ; 
+      SELECT usu_id, usu_nome, usu_email, usu_telefone, usu_acesso 
+      FROM usuarios
+    `;
+    
+    // 2. Query para CONTAGEM total (precisamos saber quantas páginas existem)
+    let countQuery = `SELECT COUNT(*) as total FROM usuarios`;
 
     const values = [];
-
-    // 2. CONCATENAÇÃO (Note o espaço no início da string " WHERE...")
+    
     if (search) {
-      queryText +=  ` WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1`;
+      const whereClause = ` WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1`;
+      queryText += whereClause;
+      countQuery += whereClause;
       values.push(`%${search}%`);
     }
 
-    // 3. ORDENAÇÃO (Note o espaço no início da string " ORDER BY...")
-    queryText +=  ` ORDER BY usu_id DESC`;
+    // Adiciona ordenação e paginação na query de dados
+    // Se tiver search, o offset é o $2, senão é $1
+    const limitOffsetParams = search ? ` LIMIT $2 OFFSET $3` : ` LIMIT $1 OFFSET $2`;
+    queryText += ` ORDER BY usu_id DESC` + limitOffsetParams;
 
-    // --- DEBUG ---
-    // Olhe no seu terminal onde roda o servidor. Isso vai mostrar a query montada.
-    console.log("SQL GERADO:", queryText);
-    console.log("VALORES:", values);
-    // -------------
+    // Adiciona os valores do limit e offset no array de values
+    values.push(limit, offset);
 
-    // 4. EXECUÇÃO
+    // Executa as duas queries (Contagem e Dados)
+    // Nota: values da contagem só precisa do search (se tiver), cuidado com indices
+    // Simplificação: Aqui executa a busca de dados
     const result = await pool.query(queryText, values);
+    
+    // Executa a contagem separada (com params corretos)
+    const countResult = await pool.query(countQuery, search ? [`%${search}%`] : []);
+    const totalItems = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / limit);
 
     return res.status(200).json({
       status: 'success',
-      data: result.rows
+      data: result.rows,
+      meta: {
+        totalItems,
+        totalPages,
+        currentPage: parseInt(page),
+        itemsPerPage: parseInt(limit)
+      }
     });
 
   } catch (error) {
-    console.error("ERRO DETALHADO:", error);
-    // Passa o erro para o próximo middleware
     next(error);
   }
 };
