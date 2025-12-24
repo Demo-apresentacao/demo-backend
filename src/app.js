@@ -13,11 +13,22 @@ import './config/db.js';
 
 const app = express();
 
-// Middlewares globais
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://urban-front-2.vercel.app"
+];
+
 app.use(cors({
-  origin: 'https://urban-front-2.vercel.app', // Sua URL da Vercel
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: function (origin, callback) {
+    // Permite requests sem origin (Postman, Render healthcheck etc)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
 }));
 
