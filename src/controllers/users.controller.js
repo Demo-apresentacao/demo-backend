@@ -124,7 +124,7 @@ export const createUser = async (req, res, next) => {
       usu_telefone,
       usu_email,
       usu_observ || null,
-      usu_acesso ?? true,
+      usu_acesso ?? false,
       usu_senha,
       usu_situacao ?? true
     ];
