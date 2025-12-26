@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { hashPassword } from '../utils/password.utils.js';
 
 // Função Auxiliar de Validação
 function isValidCPF(cpf) {
@@ -89,24 +90,23 @@ export const createUser = async (req, res, next) => {
       usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao
     } = req.body;
 
+    // Validações Básicas
     if (!usu_nome || !usu_cpf || !usu_email || !usu_senha) {
       return res.status(400).json({ status: 'error', message: 'Campos obrigatórios não informados' });
     }
 
-    if (!isValidCPF(usu_cpf)) {
-      return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
-    }
-
-    if (!isValidEmail(usu_email)) {
-      return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
-    }
-
+    if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
+    if (!isValidEmail(usu_email)) return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
+    
     if (!isValidPassword(usu_senha)) {
       return res.status(400).json({ 
         status: 'error', 
         message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
       });
     }
+
+    // 🔒 CRIPTOGRAFAR SENHA ANTES DE SALVAR
+    const passwordHash = await hashPassword(usu_senha);
 
     const query = `
       INSERT INTO usuarios (
@@ -118,14 +118,16 @@ export const createUser = async (req, res, next) => {
 
     const values = [
       usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo || null, usu_telefone || null,
-      usu_email, usu_observ || null, usu_acesso ?? false, usu_senha, usu_situacao ?? true
+      usu_email, usu_observ || null, usu_acesso ?? false, 
+      passwordHash, // <--- Enviando o HASH, não a senha pura
+      usu_situacao ?? true
     ];
+
     const result = await pool.query(query, values);
 
     return res.status(201).json({ status: 'success', message: 'Usuário criado com sucesso', data: result.rows[0] });
 
   } catch (error) {
-     // ... (Seu tratamento de erro atualizado da resposta anterior) ...
      const errorCode = error.code?.toString();
      if (errorCode === '23505') {
         if (error.constraint === 'uk_usuarios_cpf' || (error.detail && error.detail.includes('usu_cpf'))) {
@@ -152,73 +154,59 @@ export const updateUser = async (req, res, next) => {
       usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao
     } = req.body;
 
-    // 1. VALIDAÇÃO DE CPF (Se foi enviado para alteração)
+    // 1. Validação CPF
     if (usu_cpf) {
-        if (!isValidCPF(usu_cpf)) {
-            return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
-        }
-        // Checa duplicidade (CPF pertence a outra pessoa?)
+        if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
         const cpfLimpo = usu_cpf.replace(/\D/g, '');
         const cpfCheck = await pool.query(
             `SELECT usu_id FROM usuarios WHERE REGEXP_REPLACE(usu_cpf, '\\D','','g') = $1 AND usu_id != $2`,
             [cpfLimpo, id]
         );
-        if (cpfCheck.rowCount > 0) {
-            return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
-        }
+        if (cpfCheck.rowCount > 0) return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
     }
 
-    // 2. VALIDAÇÃO DE EMAIL (Se foi enviado para alteração)
-    if (usu_email) {
-        if (!isValidEmail(usu_email)) {
-            return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
-        }
+    // 2. Validação Email
+    if (usu_email && !isValidEmail(usu_email)) {
+        return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
     }
 
-    // 3. NOVA VALIDAÇÃO: SENHA (Se foi enviada para alteração)
+    // 3. Validação e Hash da Senha
+    let passwordHash = null; // Inicializa como null
+
     if (usu_senha) {
-        // Só entra aqui se usu_senha tiver algum valor (ou seja, usuário quer trocar a senha)
         if (!isValidPassword(usu_senha)) {
             return res.status(400).json({ 
                 status: 'error', 
-                message: 'A senha deve ter no mínimo 8 caracteres, maiúscula, minúscula, número e especial.' 
+                message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
             });
         }
+        // Se tem senha nova, cria o Hash
+        passwordHash = await hashPassword(usu_senha);
     }
 
-    // ATENÇÃO NA QUERY:
-    // Se o usu_senha vier undefined (usuário não mexeu na senha), 
-    // precisamos garantir que o banco NÃO grave NULL em cima da senha antiga.
-    // Uma forma rápida em SQL puro é usar COALESCE com o valor atual, 
-    // mas como estamos fazendo um UPDATE fixo, a lógica ideal no backend seria:
-    // Se usu_senha não veio, não incluímos no UPDATE ou repetimos a antiga.
-    
-    // Para simplificar sua query atual, vamos assumir que o front SEMPRE manda os dados.
-    // Mas se for uma edição parcial, o ideal é tratar isso.
-    
+    // QUERY INTELIGENTE COM COALESCE
+    // COALESCE($9, usu_senha): Se $9 for NULL, ele mantém o valor antigo (usu_senha) do banco.
     const query = `
       UPDATE usuarios
       SET usu_nome = $1, usu_cpf = $2, usu_data_nasc = $3, usu_sexo = $4,
           usu_telefone = $5, usu_email = $6, usu_observ = $7, usu_acesso = $8,
-          usu_senha = $9, usu_situacao = $10
+          usu_senha = COALESCE($9, usu_senha), 
+          usu_situacao = $10
       WHERE usu_id = $11;
     `;
 
-    // Se usu_senha for undefined/null, cuidado para não apagar a senha do banco!
-    // O ideal seria buscar o usuário antes, mas vou manter sua estrutura.
-    
     await pool.query(query, [
       usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
-      usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao, id
+      usu_email, usu_observ, usu_acesso, 
+      passwordHash, // Manda o Hash (se existir) ou null
+      usu_situacao, id
     ]);
 
     return res.json({ status: 'success', message: 'Usuário atualizado com sucesso' });
 
   } catch (error) {
      if (error.code == '23505') {
-        if (error.detail && error.detail.includes('usu_cpf')) {
-             return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
-        }
+        if (error.detail && error.detail.includes('usu_cpf')) return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
         return res.status(409).json({ status: 'error', message: 'E-mail ou CPF já em uso.' });
     }
     next(error);

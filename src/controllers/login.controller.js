@@ -1,46 +1,41 @@
 import pool from '../config/db.js';
+// Importamos a comparação
+import { comparePassword } from '../utils/password.utils.js';
 
 export const login = async (req, res, next) => {
   try {
     const { usu_email, usu_senha } = req.body;
 
-    // 1. Validação básica de entrada
     if (!usu_email || !usu_senha) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'E-mail e senha são obrigatórios.'
-      });
+      return res.status(400).json({ status: 'error', message: 'E-mail e senha são obrigatórios.' });
     }
 
-    // 2. Consulta ao banco de dados (Neon Tech)
+    // 1. BUSCA APENAS PELO EMAIL (Incluindo a senha para comparar depois)
     const query = `
       SELECT 
-        usu_id, 
-        usu_nome, 
-        usu_email, 
-        usu_acesso 
+        usu_id, usu_nome, usu_email, usu_acesso, usu_senha 
       FROM usuarios 
       WHERE usu_email = $1 
-        AND usu_senha = $2 
       LIMIT 1;
     `;
 
-    const values = [usu_email, usu_senha];
-    const result = await pool.query(query, values);
+    const result = await pool.query(query, [usu_email]);
 
-    // 3. Verifica se o usuário existe
+    // 2. Se não achou o email, já rejeita
     if (result.rowCount === 0) {
-      return res.status(401).json({
-        status: 'error',
-        message: 'E-mail ou senha inválidos.'
-      });
+      return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
     }
 
     const usuario = result.rows[0];
 
-    // 4. RESPOSTA SIMPLIFICADA
-    // Removemos o .cookie() daqui, pois o frontend cuidará disso.
-    // Isso evita problemas de CORS e políticas de SameSite:None.
+    // 3. COMPARA A SENHA ENVIADA COM O HASH DO BANCO
+    const isMatch = await comparePassword(usu_senha, usuario.usu_senha);
+
+    if (!isMatch) {
+      return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
+    }
+
+    // 4. RETORNA SUCESSO (Sem enviar a senha no JSON de volta!)
     return res.status(200).json({
       status: 'success',
       message: 'Login realizado com sucesso.',
@@ -48,16 +43,12 @@ export const login = async (req, res, next) => {
         usu_id: usuario.usu_id,
         usu_nome: usuario.usu_nome,
         usu_email: usuario.usu_email,
-        usu_acesso: usuario.usu_acesso // Booleano: true para admin, false para user
+        usu_acesso: usuario.usu_acesso
       }
     });
 
   } catch (error) {
     console.error("Erro no login:", error);
-    // É importante passar o erro para o middleware de erro do Express
-    res.status(500).json({
-        status: 'error',
-        message: 'Erro interno no servidor.'
-    });
+    res.status(500).json({ status: 'error', message: 'Erro interno no servidor.' });
   }
 };
