@@ -18,6 +18,11 @@ function isValidCPF(cpf) {
   return true;
 }
 
+function isValidEmail(email) {
+  const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return regex.test(email);
+}
+
 // ----------------------------------------------------
 //  GET LIST
 // ----------------------------------------------------
@@ -80,17 +85,15 @@ export const createUser = async (req, res, next) => {
     } = req.body;
 
     if (!usu_nome || !usu_cpf || !usu_email || !usu_senha) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Campos obrigatórios não informados'
-      });
+      return res.status(400).json({ status: 'error', message: 'Campos obrigatórios não informados' });
     }
 
     if (!isValidCPF(usu_cpf)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'CPF inválido.'
-      });
+      return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
+    }
+
+    if (!isValidEmail(usu_email)) {
+      return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
     }
 
     const query = `
@@ -102,47 +105,26 @@ export const createUser = async (req, res, next) => {
     `;
 
     const values = [
-      usu_nome,
-      usu_cpf,
-      usu_data_nasc || null,
-      usu_sexo || null,
-      usu_telefone || null,
-      usu_email,
-      usu_observ || null,
-      usu_acesso ?? false,
-      usu_senha,
-      usu_situacao ?? true
+      usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo || null, usu_telefone || null,
+      usu_email, usu_observ || null, usu_acesso ?? false, usu_senha, usu_situacao ?? true
     ];
-
     const result = await pool.query(query, values);
 
-    return res.status(201).json({
-      status: 'success',
-      message: 'Usuário criado com sucesso',
-      data: result.rows[0]
-    });
+    return res.status(201).json({ status: 'success', message: 'Usuário criado com sucesso', data: result.rows[0] });
 
   } catch (error) {
-    const errorCode = error.code?.toString();
-
-    // 🔒 TRATAMENTO SEGURO DE DUPLICIDADE
-    if (errorCode === '23505') {
-
-      // Log interno detalhado (NUNCA vai para o cliente)
-      console.warn('Tentativa de cadastro duplicado:', {
-        constraint: error.constraint,
-        detail: error.detail
-      });
-
-      // Resposta neutra para o cliente
-      return res.status(409).json({
-        status: 'error',
-        message: 'Verifique os dados informados.'
-      });
-    }
-
-    console.error('Erro ao criar usuário:', error);
-    next(error);
+     // ... (Seu tratamento de erro atualizado da resposta anterior) ...
+     const errorCode = error.code?.toString();
+     if (errorCode === '23505') {
+        if (error.constraint === 'uk_usuarios_cpf' || (error.detail && error.detail.includes('usu_cpf'))) {
+             return res.status(409).json({ status: 'error', message: 'Este CPF já possui cadastro no sistema.' });
+        }
+        if (error.constraint === 'uk_usuarios_email' || (error.detail && error.detail.includes('usu_email'))) {
+             return res.status(409).json({ status: 'error', message: 'Este e-mail já está em uso.' });
+        }
+        return res.status(409).json({ status: 'error', message: 'Dados duplicados.' });
+     }
+     next(error);
   }
 };
 
@@ -158,20 +140,22 @@ export const updateUser = async (req, res, next) => {
       usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao
     } = req.body;
 
+    // Validação de CPF (já existente)
     if (usu_cpf) {
-        if (!isValidCPF(usu_cpf)) {
-            return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
-        }
+        if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
+        // ... (sua lógica de verificação de duplicidade de CPF no update continua aqui) ...
         const cpfLimpo = usu_cpf.replace(/\D/g, '');
         const cpfCheck = await pool.query(
             `SELECT usu_id FROM usuarios WHERE REGEXP_REPLACE(usu_cpf, '\\D','','g') = $1 AND usu_id != $2`,
             [cpfLimpo, id]
         );
-        if (cpfCheck.rowCount > 0) {
-            return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
-        }
+        if (cpfCheck.rowCount > 0) return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
     }
 
+    // NOVA VALIDAÇÃO: Se o usuário estiver tentando mudar o e-mail, valida o formato
+    if (usu_email && !isValidEmail(usu_email)) {
+        return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
+    }
     const query = `
       UPDATE usuarios
       SET usu_nome = $1, usu_cpf = $2, usu_data_nasc = $3, usu_sexo = $4,
@@ -190,6 +174,10 @@ export const updateUser = async (req, res, next) => {
         if (error.detail && error.detail.includes('usu_cpf')) {
              return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
         }
+        return res.status(409).json({ status: 'error', message: 'E-mail ou CPF já em uso.' });
+    }
+    if (error.code == '23505') {
+        if (error.detail && error.detail.includes('usu_cpf')) return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
         return res.status(409).json({ status: 'error', message: 'E-mail ou CPF já em uso.' });
     }
     next(error);
