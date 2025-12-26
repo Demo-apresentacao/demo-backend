@@ -84,6 +84,7 @@ export const getUserById = async (req, res, next) => {
 //  CREATE USER (CORRIGIDO)
 // ----------------------------------------------------
 export const createUser = async (req, res, next) => {
+
   try {
     const {
       usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
@@ -117,7 +118,7 @@ export const createUser = async (req, res, next) => {
     `;
 
     const values = [
-      usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo || null, usu_telefone || null,
+      usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo ?? null, usu_telefone || null,
       usu_email, usu_observ || null, usu_acesso ?? false, 
       passwordHash, // <--- Enviando o HASH, não a senha pura
       usu_situacao ?? true

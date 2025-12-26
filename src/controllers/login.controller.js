@@ -31,6 +31,7 @@ export const login = async (req, res, next) => {
     // 3. COMPARA A SENHA ENVIADA COM O HASH DO BANCO
     const isMatch = await comparePassword(usu_senha, usuario.usu_senha);
 
+    
     if (!isMatch) {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
     }
