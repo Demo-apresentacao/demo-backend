@@ -29,6 +29,34 @@ function isValidPassword(password) {
   return regex.test(password);
 }
 
+function getAgeError(dateString) {
+  if (!dateString) return null;
+  const birthDate = new Date(dateString); // Backend geralmente lida bem com ISO string
+  const today = new Date();
+  
+  // Verifica se a data é válida
+  if (isNaN(birthDate.getTime())) return "Data inválida.";
+
+  // Como o new Date(string) pode pegar UTC, vamos usar UTC methods para garantir
+  const year = birthDate.getUTCFullYear();
+  
+  if (year < 1900 || year > today.getFullYear()) {
+    return "Ano de nascimento inválido.";
+  }
+
+  // Cálculo de idade
+  // getTime() calcula a diferença em milissegundos
+  // 31557600000 é aprox 1 ano em ms (365.25 dias)
+  const ageDifMs = Date.now() - birthDate.getTime();
+  const ageDate = new Date(ageDifMs); 
+  const age = Math.abs(ageDate.getUTCFullYear() - 1970);
+
+  if (age < 18) {
+    return "Usuário deve ser maior de 18 anos.";
+  }
+  return null;
+}
+
 // ----------------------------------------------------
 //  GET LIST
 // ----------------------------------------------------
@@ -104,6 +132,13 @@ export const createUser = async (req, res, next) => {
         status: 'error', 
         message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
       });
+    }
+
+    if (usu_data_nasc) {
+        const dateError = getAgeError(usu_data_nasc);
+        if (dateError) {
+             return res.status(400).json({ status: 'error', message: dateError });
+        }
     }
 
     // 🔒 CRIPTOGRAFAR SENHA ANTES DE SALVAR
@@ -183,6 +218,13 @@ export const updateUser = async (req, res, next) => {
         }
         // Se tem senha nova, cria o Hash
         passwordHash = await hashPassword(usu_senha);
+    }
+
+    if (usu_data_nasc) {
+        const dateError = getAgeError(usu_data_nasc);
+        if (dateError) {
+             return res.status(400).json({ status: 'error', message: dateError });
+        }
     }
 
     // QUERY INTELIGENTE COM COALESCE
