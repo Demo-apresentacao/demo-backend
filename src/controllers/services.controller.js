@@ -4,7 +4,13 @@ import pool from '../config/db.js';
 // Lista todos os serviços
 export const listServices = async (req, res, next) => {
   try {
-    const query = `
+    // 1. Recebe parâmetros de paginação e busca da URL
+    const { search, page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    // 2. Query Principal (Dados)
+    // Mantivemos o JOIN para trazer o nome da categoria junto
+    let queryText = `
       SELECT
         s.serv_id,
         s.cat_serv_id,
@@ -17,15 +23,56 @@ export const listServices = async (req, res, next) => {
       FROM servicos s
       JOIN categorias_servicos cs
         ON s.cat_serv_id = cs.cat_serv_id
-      ORDER BY s.serv_id;
     `;
 
-    const result = await pool.query(query);
+    // 3. Query de Contagem (Total de itens para a paginação)
+    let countQuery = `
+      SELECT COUNT(*) as total 
+      FROM servicos s
+      JOIN categorias_servicos cs
+        ON s.cat_serv_id = cs.cat_serv_id
+    `;
 
-    return res.json({
+    const values = [];
+
+    // 4. Lógica de Filtro (Search)
+    if (search) {
+      // Adicionei busca tanto no Nome quanto na Descrição do serviço
+      const whereClause = ` WHERE s.serv_nome ILIKE $1 OR s.serv_descricao ILIKE $1`;
+      queryText += whereClause;
+      countQuery += whereClause;
+      values.push(`%${search}%`);
+    }
+
+    // 5. Adiciona Ordenação e Paginação (LIMIT e OFFSET)
+    // Se tiver busca, os params são $2 e $3. Se não, são $1 e $2.
+    const limitOffsetParams = search ? ` LIMIT $2 OFFSET $3` : ` LIMIT $1 OFFSET $2`;
+    
+    // Ordenei por DESC (mais novos primeiro) para ficar igual ao users
+    queryText += ` ORDER BY s.serv_id DESC` + limitOffsetParams;
+    
+    values.push(limit, offset);
+
+    // 6. Executa as queries no Banco
+    const result = await pool.query(queryText, values);
+    const countResult = await pool.query(countQuery, search ? [`%${search}%`] : []);
+    
+    // 7. Calcula totais
+    const totalItems = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // 8. Retorna no formato padrão com META dados
+    return res.status(200).json({
       status: 'success',
-      data: result.rows
+      data: result.rows,
+      meta: { 
+        totalItems, 
+        totalPages, 
+        currentPage: parseInt(page), 
+        itemsPerPage: parseInt(limit) 
+      }
     });
+
   } catch (error) {
     next(error);
   }
