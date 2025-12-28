@@ -5,79 +5,63 @@ import pool from '../config/db.js';
  * GET /service-categories
  */
 export const listServiceCategories = async (req, res, next) => {
-  try {
-    const query = `
-      SELECT
-        cat_serv_id,
-        cat_serv_nome
-      FROM categorias_servicos
-      ORDER BY cat_serv_id;
-    `;
+    try {
+        // 👇 AQUI: Adicionei cat_serv_situacao na query
+        const query = `
+            SELECT cat_serv_id, cat_serv_nome, cat_serv_situacao 
+            FROM categorias_servicos 
+            ORDER BY cat_serv_nome ASC
+        `;
+        
+        const result = await pool.query(query);
 
-    const result = await pool.query(query);
-
-    return res.json({
-      status: 'success',
-      data: result.rows,
-      total: result.rowCount
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({
+            status: 'success',
+            data: result.rows
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
-/**
- * Cadastra uma nova categoria de serviço
- * POST /service-categories
- */
+// POST /service-categories
 export const createServiceCategory = async (req, res, next) => {
-  try {
-    const { cat_serv_nome } = req.body;
+    try {
+        const { cat_serv_nome } = req.body;
+        
+        if (!cat_serv_nome) return res.status(400).json({ message: "Nome da categoria é obrigatório" });
 
-    const query = `
-      INSERT INTO categorias_servicos (cat_serv_nome)
-      VALUES ($1)
-      RETURNING cat_serv_id;
-    `;
+        const result = await pool.query(
+            `INSERT INTO categorias_servicos (cat_serv_nome) VALUES ($1) RETURNING *`,
+            [cat_serv_nome]
+        );
 
-    const result = await pool.query(query, [cat_serv_nome]);
-
-    return res.status(201).json({
-      status: 'success',
-      message: 'Categoria de serviço cadastrada com sucesso.',
-      data: result.rows[0]
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.status(201).json({ status: 'success', data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
 };
 
-/**
- * Atualiza uma categoria de serviço
- * PUT /service-categories/:id
- */
+// PUT /service-categories/:id
 export const updateServiceCategory = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { cat_serv_nome } = req.body;
+    try {
+        const { id } = req.params;
+        // Agora aceitamos também o cat_serv_situacao
+        const { cat_serv_nome, cat_serv_situacao } = req.body;
 
-    const query = `
-      UPDATE categorias_servicos
-      SET cat_serv_nome = $1
-      WHERE cat_serv_id = $2;
-    `;
+        const result = await pool.query(
+            `UPDATE categorias_servicos 
+             SET cat_serv_nome = $1, cat_serv_situacao = $2 
+             WHERE cat_serv_id = $3 
+             RETURNING *`,
+            [cat_serv_nome, cat_serv_situacao, id]
+        );
 
-    await pool.query(query, [cat_serv_nome, id]);
-
-    return res.json({
-      status: 'success',
-      message: `Categoria ${id} atualizada com sucesso.`
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({ status: 'success', data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
 };
-
 /**
  * Remove uma categoria de serviço
  * DELETE /service-categories/:id
