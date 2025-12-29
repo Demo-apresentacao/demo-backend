@@ -1,10 +1,97 @@
 import pool from '../config/db.js';
 
+// --- FUNÇÕES AUXILIARES (HELPERS) ---
+
+// Converte string "HH:MM:SS" para minutos totais (ex: "01:30" -> 90)
+const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + m;
+};
+
+// Adiciona minutos a um horário e retorna "HH:MM"
+const addMinutesToTime = (timeStr, minutesToAdd) => {
+    const totalMinutes = timeToMinutes(timeStr) + minutesToAdd;
+    const h = Math.floor(totalMinutes / 60) % 24; // % 24 para virar o dia se necessário
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+// Verifica se dois intervalos se sobrepõem
+// (StartA < EndB) e (EndA > StartB)
+const isOverlapping = (startA, endA, startB, endB) => {
+    return (startA < endB) && (endA > startB);
+};
+
+// Função Principal de Validação de Conflito
+const verificarConflito = async (client, agendData, agendHorario, serviceIds, excludeAgendId = null) => {
+    // 1. Calcular a duração total dos serviços solicitados
+    // Se não tiver serviços (ex: update só de horário), assumimos 0 ou tratamos fora.
+    // Mas aqui vamos buscar a duração no banco.
+    
+    let totalDurationMinutes = 0;
+    
+    if (serviceIds && serviceIds.length > 0) {
+        // Busca a duração de cada serviço selecionado
+        const servicesQuery = `
+            SELECT serv_duracao FROM servicos WHERE serv_id = ANY($1::int[])
+        `;
+        const resServices = await client.query(servicesQuery, [serviceIds]);
+        
+        resServices.rows.forEach(s => {
+            totalDurationMinutes += timeToMinutes(s.serv_duracao);
+        });
+    }
+
+    // Se a duração for 0 (nenhum serviço selecionado), definimos um padrão mínimo de 30 min 
+    // ou deixamos passar (mas ideal é ter duração)
+    if (totalDurationMinutes === 0) totalDurationMinutes = 30;
+
+    const newStartMin = timeToMinutes(agendHorario);
+    const newEndMin = newStartMin + totalDurationMinutes;
+
+    // 2. Buscar TODOS os agendamentos ativos daquele dia
+    // (Trazemos também os serviços deles para calcular a duração de cada um)
+    const existingQuery = `
+        SELECT 
+            a.agend_id, 
+            a.agend_horario, 
+            v.veic_id,    
+            v.veic_placa,
+            SUM(EXTRACT(EPOCH FROM s.serv_duracao)/60) as duracao_total_min
+        FROM agendamentos a
+        JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
+        JOIN veiculos v ON vu.veic_id = v.veic_id
+        LEFT JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
+        LEFT JOIN servicos s ON ags.serv_id = s.serv_id
+        WHERE a.agend_data = $1 
+          AND a.agend_situacao != 0 
+          ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
+        GROUP BY a.agend_id, a.agend_horario, v.veic_placa, v.veic_id
+    `;
+
+    const params = excludeAgendId ? [agendData, excludeAgendId] : [agendData];
+    const existingRes = await client.query(existingQuery, params);
+
+    // 3. Comparar conflitos
+    for (const agend of existingRes.rows) {
+        const existStartMin = timeToMinutes(agend.agend_horario);
+        // Se o agendamento existente não tiver serviços, assume 30min padrão
+        const existDuration = parseFloat(agend.duracao_total_min) || 30; 
+        const existEndMin = existStartMin + existDuration;
+
+        if (isOverlapping(newStartMin, newEndMin, existStartMin, existEndMin)) {
+            const fimFormatado = addMinutesToTime(agend.agend_horario, existDuration);
+            throw new Error(`Conflito de horário! Já existe um agendamento (Placa: ${agend.veic_placa}) das ${agend.agend_horario.substring(0,5)} às ${fimFormatado}.`);
+        }
+    }
+};
+
+// --- CONTROLLERS ---
+
 // GET /appointments
-// Lista agendamentos com paginação, filtro e dados do cliente/veículo
 export const listAppointments = async (req, res, next) => {
   try {
-    // Agora recebemos date e status na query string
     const { search, date, status, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
@@ -17,64 +104,44 @@ export const listAppointments = async (req, res, next) => {
       LEFT JOIN servicos s ON ags.serv_id = s.serv_id
     `;
 
-    // --- CONSTRUÇÃO DINÂMICA DO WHERE ---
     const conditions = [];
     const values = [];
     let paramCounter = 1;
 
-    // 1. Filtro de Texto (Nome ou Placa)
     if (search) {
       conditions.push(`(u.usu_nome ILIKE $${paramCounter} OR v.veic_placa ILIKE $${paramCounter})`);
       values.push(`%${search}%`);
       paramCounter++;
     }
-
-    // 2. Filtro de Data
     if (date) {
       conditions.push(`a.agend_data = $${paramCounter}`);
       values.push(date);
       paramCounter++;
     }
-
-    // 3. Filtro de Status
     if (status) {
       conditions.push(`a.agend_situacao = $${paramCounter}`);
-      values.push(status); // O front deve mandar o ID (1, 2, 0...)
+      values.push(status);
       paramCounter++;
     }
 
-    // Monta a cláusula WHERE se houver condições
     const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 
-    // --- QUERY FINAL ---
     let queryText = `
       SELECT 
-        a.agend_id,
-        a.agend_data,
-        a.agend_horario,
-        a.agend_situacao,
-        v.veic_placa,
-        u.usu_nome,
+        a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
+        v.veic_placa, u.usu_nome,
         STRING_AGG(s.serv_nome, ', ') AS lista_servicos
       ${baseQuery}
       ${whereClause}
       GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, v.veic_placa, u.usu_nome 
     `;
 
-    // --- QUERY DE CONTAGEM ---
-    let countQuery = `
-      SELECT COUNT(DISTINCT a.agend_id) as total 
-      ${baseQuery}
-      ${whereClause}
-    `;
+    let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
 
-    // Ordenação e Paginação
     queryText += ` ORDER BY a.agend_data DESC, a.agend_horario DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
     values.push(limit, offset);
 
     const result = await pool.query(queryText, values);
-    
-    // Para o count, usamos os values originais (sem limit/offset)
     const countValues = values.slice(0, paramCounter - 1); 
     const countResult = await pool.query(countQuery, countValues);
 
@@ -94,24 +161,17 @@ export const listAppointments = async (req, res, next) => {
 };
 
 // GET /appointments/:id
-// Busca detalhes + Lista de serviços vinculados
 export const getAppointmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    // 1. Dados Principais
     const queryMain = `
       SELECT 
-        a.*,
-        u.usu_nome,
-        u.usu_telefone,
-        m.mod_nome AS veic_modelo, -- <--- CORRIGIDO AQUI TAMBÉM
-        v.veic_placa
+        a.*, u.usu_nome, u.usu_telefone, m.mod_nome AS veic_modelo, v.veic_placa
       FROM agendamentos a
       JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
       JOIN usuarios u ON vu.usu_id = u.usu_id
       JOIN veiculos v ON vu.veic_id = v.veic_id
-      JOIN modelos m ON v.mod_id = m.mod_id -- <--- NOVO JOIN
+      JOIN modelos m ON v.mod_id = m.mod_id
       WHERE a.agend_id = $1
     `;
     const resultMain = await pool.query(queryMain, [id]);
@@ -120,13 +180,8 @@ export const getAppointmentById = async (req, res, next) => {
       return res.status(404).json({ message: 'Agendamento não encontrado' });
     }
 
-    // 2. Serviços deste agendamento
     const queryServices = `
-        SELECT 
-            ags.agend_serv_id,
-            s.serv_nome,
-            s.serv_preco,
-            sit.agend_serv_situ_nome
+        SELECT ags.agend_serv_id, s.serv_id, s.serv_nome, s.serv_preco, sit.agend_serv_situ_nome
         FROM agenda_servicos ags
         JOIN servicos s ON ags.serv_id = s.serv_id
         JOIN agenda_servicos_situacao sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
@@ -134,31 +189,27 @@ export const getAppointmentById = async (req, res, next) => {
     `;
     const resultServices = await pool.query(queryServices, [id]);
 
-    const appointmentData = {
-        ...resultMain.rows[0],
-        servicos: resultServices.rows // Anexa a lista de serviços ao objeto
-    };
-
-    return res.json({ status: 'success', data: appointmentData });
+    return res.json({ 
+        status: 'success', 
+        data: { ...resultMain.rows[0], servicos: resultServices.rows } 
+    });
 
   } catch (error) {
     next(error);
   }
 };
 
-// ... O RESTO (create, update, cancel) PODE MANTER IGUAL ...
-// (Só copiei a parte do GET que estava dando erro)
-
+// POST /appointments (COM VALIDAÇÃO DE CONFLITO)
 export const createAppointment = async (req, res, next) => {
     const client = await pool.connect();
     try {
-        const {
-            veic_usu_id,
-            agend_data,
-            agend_horario,
-            agend_observ,
-            services 
-        } = req.body;
+        const { veic_usu_id, agend_data, agend_horario, agend_observ, services } = req.body;
+
+        // --- VALIDAÇÃO DE CONFLITO ---
+        // Se services vier vazio, cuidado!
+        const servicesToCheck = (services && services.length > 0) ? services : [];
+        await verificarConflito(client, agend_data, agend_horario, servicesToCheck);
+        // -----------------------------
 
         await client.query('BEGIN');
 
@@ -189,22 +240,47 @@ export const createAppointment = async (req, res, next) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
+        // Se for erro de validação (nossa msg customizada), retorna 400
+        if (error.message.includes("Conflito de horário")) {
+            return res.status(400).json({ status: 'error', message: error.message });
+        }
         next(error);
     } finally {
         client.release();
     }
 };
 
+// PUT /appointments/:id (COM VALIDAÇÃO DE CONFLITO)
 export const updateAppointment = async (req, res, next) => {
-    const client = await pool.connect(); // Precisamos de transação aqui também
+    const client = await pool.connect();
     try {
         const { id } = req.params;
-        // Agora pegamos também o array 'services' do corpo da requisição
         const { agend_data, agend_horario, agend_observ, agend_situacao, services } = req.body;
+
+        // --- PREPARAÇÃO PARA VALIDAÇÃO ---
+        // Precisamos saber quais serviços estarão valendo para calcular a duração.
+        // Se o usuário mandou 'services' no body, usamos eles.
+        // Se NÃO mandou (só editou horário), precisamos buscar os serviços que já existem no banco.
+        
+        let effectiveServicesIds = services;
+        
+        if (!effectiveServicesIds) {
+            // Busca serviços atuais do agendamento
+            const currentServicesRes = await client.query(
+                `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`, 
+                [id]
+            );
+            effectiveServicesIds = currentServicesRes.rows.map(row => row.serv_id);
+        }
+
+        // --- VALIDAÇÃO DE CONFLITO ---
+        // Passamos o ID atual para ignorá-lo na busca (não conflitar com ele mesmo)
+        await verificarConflito(client, agend_data, agend_horario, effectiveServicesIds, id);
+        // -----------------------------
 
         await client.query('BEGIN');
 
-        // 1. Atualiza dados principais do Agendamento
+        // 1. Atualiza dados principais
         const updateQuery = `
             UPDATE agendamentos
             SET agend_data = $1, agend_horario = $2, agend_observ = $3, agend_situacao = $4
@@ -218,37 +294,35 @@ export const updateAppointment = async (req, res, next) => {
             return res.status(404).json({ message: "Agendamento não encontrado" });
         }
 
-        // 2. Atualiza a lista de Serviços (Se o array services foi enviado)
+        // 2. Atualiza Serviços (apenas se o array foi enviado)
         if (services && Array.isArray(services)) {
-            // A) Remove TODOS os serviços antigos desse agendamento
             await client.query(`DELETE FROM agenda_servicos WHERE agend_id = $1`, [id]);
-
-            // B) Insere os NOVOS serviços selecionados
             if (services.length > 0) {
                 for (const servId of services) {
                     await client.query(`
                         INSERT INTO agenda_servicos (agend_id, serv_id, agend_serv_situ_id)
                         VALUES ($1, $2, 1) 
                     `, [id, servId]);
-                    // Nota: Reiniciamos o status do serviço como 1 (Pendente) ao readicionar, 
-                    // ou você pode criar uma lógica para manter status antigo se preferir complexidade.
                 }
             }
         }
 
         await client.query('COMMIT');
-
         return res.json({ status: 'success', data: result.rows[0] });
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error("Erro ao atualizar agendamento:", error);
+        if (error.message.includes("Conflito de horário")) {
+            return res.status(400).json({ status: 'error', message: error.message });
+        }
+        console.error("Erro ao atualizar:", error);
         next(error);
     } finally {
         client.release();
     }
 };
 
+// PATCH /cancel
 export const cancelAppointment = async (req, res, next) => {
     try {
         const { id } = req.params;
