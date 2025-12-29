@@ -45,7 +45,7 @@ import unavailabilityRoutes from './routes/unavailability.routes.js';
 import vehicleUsersRoutes from './routes/vehicleUsers.routes.js';
 import agendaServicesRoutes from './routes/agendaServices.routes.js';
 import agendaServiceStatusRoutes from './routes/agendaServiceStatus.routes.js';
-import agendamentosRoutes from './routes/agendamentos.routes.js';
+import appointmentsRoutes from './routes/appointments.routes.js';
 import categoriesRoutes from './routes/categories.routes.js';
 import serviceCategoriesRoutes from './routes/serviceCategories.routes.js';
 import brandsRoutes from './routes/brands.routes.js';
@@ -61,7 +61,7 @@ app.use('/unavailability', unavailabilityRoutes); // Indisponibilidade
 app.use('/vehicle-users', vehicleUsersRoutes); // Associação veículo-usuário
 app.use('/agenda-services', agendaServicesRoutes); // Agenda de serviços
 app.use('/agenda-services-status', agendaServiceStatusRoutes); // Situações da agenda de serviços
-app.use('/agendamentos', agendamentosRoutes); // Agendamentos
+app.use('/appointments', appointmentsRoutes); // Agendamentos
 app.use('/categories', categoriesRoutes); // Categorias
 app.use('/service-categories', serviceCategoriesRoutes); // Categorias de serviços
 app.use('/brands', brandsRoutes); // Marcas

@@ -275,3 +275,21 @@ export const deleteUser = async (req, res, next) => {
     return res.json({ status: 'success', message: 'Usuário removido com sucesso' });
   } catch (error) { next(error); }
 };
+
+// GET /users/:id/vehicles
+export const getUserVehicles = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const query = `
+            SELECT v.veic_id, v.veic_placa, m.mod_nome, vu.veic_usu_id
+            FROM veiculo_usuario vu
+            JOIN veiculos v ON vu.veic_id = v.veic_id
+            JOIN modelos m ON v.mod_id = m.mod_id
+            WHERE vu.usu_id = $1 AND v.veic_situacao = true
+        `;
+        const result = await pool.query(query, [id]);
+        return res.json(result.rows);
+    } catch (error) {
+        next(error);
+    }
+};
