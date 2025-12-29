@@ -5,6 +5,7 @@ import {
     createUser,
     updateUser,
     toggleUserStatus,
+    getUserVehicles,
     deleteUser
 } from '../controllers/users.controller.js';
 
@@ -15,6 +16,9 @@ router.get('/', listUsers);
 
 //  GET /users/:id → busca usuário por id
 router.get('/:id', getUserById);
+
+//  GET /users/:id/vehicles → busca veículos do usuário
+router.get('/:id/vehicles', getUserVehicles);
 
 //  POST /users → cria usuário
 router.post('/', createUser);
