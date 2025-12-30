@@ -1,7 +1,10 @@
 import pool from '../config/db.js';
 import { hashPassword } from '../utils/password.utils.js';
 
-// Função Auxiliar de Validação
+// ====================================================
+// FUNÇÕES AUXILIARES DE VALIDAÇÃO
+// ====================================================
+
 function isValidCPF(cpf) {
   if (!cpf) return false;
   const cleanCPF = cpf.replace(/\D/g, '');
@@ -31,22 +34,17 @@ function isValidPassword(password) {
 
 function getAgeError(dateString) {
   if (!dateString) return null;
-  const birthDate = new Date(dateString); // Backend geralmente lida bem com ISO string
+  const birthDate = new Date(dateString); 
   const today = new Date();
   
-  // Verifica se a data é válida
   if (isNaN(birthDate.getTime())) return "Data inválida.";
 
-  // Como o new Date(string) pode pegar UTC, vamos usar UTC methods para garantir
   const year = birthDate.getUTCFullYear();
   
   if (year < 1900 || year > today.getFullYear()) {
     return "Ano de nascimento inválido.";
   }
 
-  // Cálculo de idade
-  // getTime() calcula a diferença em milissegundos
-  // 31557600000 é aprox 1 ano em ms (365.25 dias)
   const ageDifMs = Date.now() - birthDate.getTime();
   const ageDate = new Date(ageDifMs); 
   const age = Math.abs(ageDate.getUTCFullYear() - 1970);
@@ -57,31 +55,58 @@ function getAgeError(dateString) {
   return null;
 }
 
+// ====================================================
+// CONTROLLERS
+// ====================================================
+
 // ----------------------------------------------------
-//  GET LIST
+//  GET LIST (Corrigido: Adicionado usu_situacao)
 // ----------------------------------------------------
 export const listUsers = async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 10 } = req.query;
+    const { search, page = 1, limit = 10, status } = req.query; // Recebe 'status'
     const offset = (page - 1) * limit;
 
-    let queryText = `SELECT usu_id, usu_nome, usu_email, usu_telefone, usu_acesso FROM usuarios`;
+    let queryText = `SELECT usu_id, usu_nome, usu_email, usu_telefone, usu_acesso, usu_situacao FROM usuarios`;
     let countQuery = `SELECT COUNT(*) as total FROM usuarios`;
-    const values = [];
     
+    // Array para guardar as condições do WHERE
+    const conditions = [];
+    const values = [];
+    let paramIndex = 1;
+
+    // 1. Filtro de Texto (Nome ou Email)
     if (search) {
-      const whereClause = ` WHERE usu_nome ILIKE $1 OR usu_email ILIKE $1`;
-      queryText += whereClause;
-      countQuery += whereClause;
+      conditions.push(`(usu_nome ILIKE $${paramIndex} OR usu_email ILIKE $${paramIndex})`);
       values.push(`%${search}%`);
+      paramIndex++;
     }
 
-    const limitOffsetParams = search ? ` LIMIT $2 OFFSET $3` : ` LIMIT $1 OFFSET $2`;
-    queryText += ` ORDER BY usu_id DESC` + limitOffsetParams;
+    // 2. Filtro de Status (active, inactive, all)
+    if (status && status !== 'all') {
+      const statusBool = status === 'active'; // se for 'active' vira true, senão false
+      conditions.push(`usu_situacao = $${paramIndex}`);
+      values.push(statusBool);
+      paramIndex++;
+    }
+
+    // Monta o WHERE se houver condições
+    if (conditions.length > 0) {
+      const whereClause = ` WHERE ` + conditions.join(' AND ');
+      queryText += whereClause;
+      countQuery += whereClause;
+    }
+
+    // Paginação
+    queryText += ` ORDER BY usu_id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     values.push(limit, offset);
 
     const result = await pool.query(queryText, values);
-    const countResult = await pool.query(countQuery, search ? [`%${search}%`] : []);
+    
+    // Para contar o total, usamos os mesmos valores de filtro (sem limit/offset)
+    // Precisamos de um array novo só com os filtros para o count
+    const countValues = values.slice(0, paramIndex - 1); 
+    const countResult = await pool.query(countQuery, countValues);
     
     const totalItems = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalItems / limit);
@@ -109,10 +134,9 @@ export const getUserById = async (req, res, next) => {
 };
 
 // ----------------------------------------------------
-//  CREATE USER (CORRIGIDO)
+//  CREATE USER
 // ----------------------------------------------------
 export const createUser = async (req, res, next) => {
-
   try {
     const {
       usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
@@ -141,7 +165,7 @@ export const createUser = async (req, res, next) => {
         }
     }
 
-    // 🔒 CRIPTOGRAFAR SENHA ANTES DE SALVAR
+    // CRIPTOGRAFAR SENHA ANTES DE SALVAR
     const passwordHash = await hashPassword(usu_senha);
 
     const query = `
@@ -155,7 +179,7 @@ export const createUser = async (req, res, next) => {
     const values = [
       usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo ?? null, usu_telefone || null,
       usu_email, usu_observ || null, usu_acesso ?? false, 
-      passwordHash, // <--- Enviando o HASH, não a senha pura
+      passwordHash, 
       usu_situacao ?? true
     ];
 
@@ -207,7 +231,7 @@ export const updateUser = async (req, res, next) => {
     }
 
     // 3. Validação e Hash da Senha
-    let passwordHash = null; // Inicializa como null
+    let passwordHash = null; 
 
     if (usu_senha) {
         if (!isValidPassword(usu_senha)) {
@@ -216,7 +240,6 @@ export const updateUser = async (req, res, next) => {
                 message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
             });
         }
-        // Se tem senha nova, cria o Hash
         passwordHash = await hashPassword(usu_senha);
     }
 
@@ -227,14 +250,13 @@ export const updateUser = async (req, res, next) => {
         }
     }
 
-    // QUERY INTELIGENTE COM COALESCE
-    // COALESCE($9, usu_senha): Se $9 for NULL, ele mantém o valor antigo (usu_senha) do banco.
+    // COALESCE: Se a senha for enviada como null/undefined no código, mantém a do banco
     const query = `
       UPDATE usuarios
       SET usu_nome = $1, usu_cpf = $2, usu_data_nasc = $3, usu_sexo = $4,
           usu_telefone = $5, usu_email = $6, usu_observ = $7, usu_acesso = $8,
           usu_senha = COALESCE($9, usu_senha), 
-          usu_situacao = $10
+          usu_situacao = COALESCE($10, usu_situacao)  -- <--- MUDANÇA AQUI
       WHERE usu_id = $11;
     `;
 
@@ -242,7 +264,8 @@ export const updateUser = async (req, res, next) => {
       usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
       usu_email, usu_observ, usu_acesso, 
       passwordHash, // Manda o Hash (se existir) ou null
-      usu_situacao, id
+      usu_situacao ?? null, // <--- GARANTA QUE SEJA NULL SE VIER UNDEFINED
+      id
     ]);
 
     return res.json({ status: 'success', message: 'Usuário atualizado com sucesso' });
@@ -257,17 +280,41 @@ export const updateUser = async (req, res, next) => {
 };
 
 // ----------------------------------------------------
-//  TOGGLE STATUS & DELETE
+//  UPDATE USER STATUS (PATCH)
 // ----------------------------------------------------
-export const toggleUserStatus = async (req, res, next) => {
-  try {
+export const updateUserStatus = async (req, res) => {
     const { id } = req.params;
-    const { usu_situacao } = req.body;
-    await pool.query(`UPDATE usuarios SET usu_situacao = $1 WHERE usu_id = $2`, [usu_situacao, id]);
-    return res.json({ status: 'success', message: `Usuário ${usu_situacao ? 'ativado' : 'desativado'} com sucesso` });
-  } catch (error) { next(error); }
+    const { usu_situacao } = req.body; // Recebe true ou false
+
+    try {
+        const query = `
+            UPDATE usuarios 
+            SET usu_situacao = $1 
+            WHERE usu_id = $2
+            RETURNING usu_id, usu_nome, usu_situacao;
+        `;
+        
+        const result = await pool.query(query, [usu_situacao, id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+
+        return res.json({ 
+            status: 'success', 
+            message: 'Status atualizado com sucesso.',
+            user: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error("Erro ao atualizar status:", error);
+        return res.status(500).json({ message: 'Erro interno ao atualizar status.' });
+    }
 };
 
+// ----------------------------------------------------
+//  DELETE USER
+// ----------------------------------------------------
 export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -276,7 +323,9 @@ export const deleteUser = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// GET /users/:id/vehicles
+// ----------------------------------------------------
+//  GET VEHICLES BY USER
+// ----------------------------------------------------
 export const getUserVehicles = async (req, res, next) => {
     try {
         const { id } = req.params;

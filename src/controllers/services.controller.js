@@ -2,75 +2,74 @@ import pool from '../config/db.js';
 
 // GET /services
 // Lista todos os serviços
+// GET /services
+// Lista todos os serviços COM FILTROS
 export const listServices = async (req, res, next) => {
   try {
-    // 1. Recebe parâmetros de paginação e busca da URL
-    const { search, page = 1, limit = 10 } = req.query;
+    // 1. Recebe parâmetros (search, page, limit e STATUS)
+    const { search, page = 1, limit = 10, status } = req.query;
     const offset = (page - 1) * limit;
 
-    // 2. Query Principal (Dados)
-    // Mantivemos o JOIN para trazer o nome da categoria junto
+    // 2. Base da Query
     let queryText = `
       SELECT
-        s.serv_id,
-        s.cat_serv_id,
-        cs.cat_serv_nome,
-        s.serv_nome,
-        s.serv_duracao,
-        s.serv_preco,
-        s.serv_descricao,
-        s.serv_situacao
+        s.serv_id, s.cat_serv_id, cs.cat_serv_nome, s.serv_nome,
+        s.serv_duracao, s.serv_preco, s.serv_descricao, s.serv_situacao
       FROM servicos s
-      JOIN categorias_servicos cs
-        ON s.cat_serv_id = cs.cat_serv_id
+      JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
     `;
 
-    // 3. Query de Contagem (Total de itens para a paginação)
     let countQuery = `
       SELECT COUNT(*) as total 
       FROM servicos s
-      JOIN categorias_servicos cs
-        ON s.cat_serv_id = cs.cat_serv_id
+      JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
     `;
 
+    // 3. Montagem Dinâmica do WHERE
+    const conditions = [];
     const values = [];
+    let paramIndex = 1;
 
-    // 4. Lógica de Filtro (Search)
+    // Filtro de Texto (Nome ou Descrição)
     if (search) {
-      // Adicionei busca tanto no Nome quanto na Descrição do serviço
-      const whereClause = ` WHERE s.serv_nome ILIKE $1 OR s.serv_descricao ILIKE $1`;
-      queryText += whereClause;
-      countQuery += whereClause;
+      conditions.push(`(s.serv_nome ILIKE $${paramIndex} OR s.serv_descricao ILIKE $${paramIndex})`);
       values.push(`%${search}%`);
+      paramIndex++;
     }
 
-    // 5. Adiciona Ordenação e Paginação (LIMIT e OFFSET)
-    // Se tiver busca, os params são $2 e $3. Se não, são $1 e $2.
-    const limitOffsetParams = search ? ` LIMIT $2 OFFSET $3` : ` LIMIT $1 OFFSET $2`;
-    
-    // Ordenei por DESC (mais novos primeiro) para ficar igual ao users
-    queryText += ` ORDER BY s.serv_id DESC` + limitOffsetParams;
-    
+    // Filtro de Status (active, inactive, all)
+    if (status && status !== 'all') {
+      const statusBool = status === 'active'; // true ou false
+      conditions.push(`s.serv_situacao = $${paramIndex}`);
+      values.push(statusBool);
+      paramIndex++;
+    }
+
+    // Aplica o WHERE se houver condições
+    if (conditions.length > 0) {
+      const whereClause = ` WHERE ` + conditions.join(' AND ');
+      queryText += whereClause;
+      countQuery += whereClause;
+    }
+
+    // 4. Ordenação e Paginação
+    queryText += ` ORDER BY s.serv_id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     values.push(limit, offset);
 
-    // 6. Executa as queries no Banco
+    // 5. Execução
     const result = await pool.query(queryText, values);
-    const countResult = await pool.query(countQuery, search ? [`%${search}%`] : []);
     
-    // 7. Calcula totais
+    // Para o count, usamos os values apenas dos filtros (sem limit/offset)
+    const countValues = values.slice(0, paramIndex - 1);
+    const countResult = await pool.query(countQuery, countValues);
+    
     const totalItems = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalItems / limit);
 
-    // 8. Retorna no formato padrão com META dados
     return res.status(200).json({
       status: 'success',
       data: result.rows,
-      meta: { 
-        totalItems, 
-        totalPages, 
-        currentPage: parseInt(page), 
-        itemsPerPage: parseInt(limit) 
-      }
+      meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
     });
 
   } catch (error) {

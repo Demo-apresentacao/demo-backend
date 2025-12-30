@@ -10,10 +10,10 @@ export const login = async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'E-mail e senha são obrigatórios.' });
     }
 
-    // 1. BUSCA APENAS PELO EMAIL (Incluindo a senha para comparar depois)
+    // 1. ATUALIZAÇÃO AQUI: Adicionei 'usu_situacao' na busca
     const query = `
       SELECT 
-        usu_id, usu_nome, usu_email, usu_acesso, usu_senha 
+        usu_id, usu_nome, usu_email, usu_acesso, usu_senha, usu_situacao 
       FROM usuarios 
       WHERE usu_email = $1 
       LIMIT 1;
@@ -21,22 +21,31 @@ export const login = async (req, res, next) => {
 
     const result = await pool.query(query, [usu_email]);
 
-    // 2. Se não achou o email, já rejeita
+    // 2. Se não achou o email, rejeita
     if (result.rowCount === 0) {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
     }
 
     const usuario = result.rows[0];
 
+    // --- NOVA VALIDAÇÃO DE STATUS ---
+    // --- VALIDAÇÃO DE STATUS (Mensagem Melhorada) ---
+    if (!usuario.usu_situacao) {
+        return res.status(403).json({ 
+            status: 'error', 
+            // Mensagem personalizada que vai aparecer no SweetAlert
+            message: 'Seu usuário está inativo. Por favor, entre em contato com o administrador do sistema para regularizar seu acesso.' 
+        });
+    }
+
     // 3. COMPARA A SENHA ENVIADA COM O HASH DO BANCO
     const isMatch = await comparePassword(usu_senha, usuario.usu_senha);
 
-    
     if (!isMatch) {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
     }
 
-    // 4. RETORNA SUCESSO (Sem enviar a senha no JSON de volta!)
+    // 4. RETORNA SUCESSO
     return res.status(200).json({
       status: 'success',
       message: 'Login realizado com sucesso.',
