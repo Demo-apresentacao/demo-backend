@@ -25,16 +25,16 @@ const isOverlapping = (startA, endA, startB, endB) => {
 
 // Função Principal de Validação de Conflito e Horário de Expediente
 const verificarConflito = async (client, agendData, agendHorario, serviceIds, excludeAgendId = null) => {
-    
+
     // 1. Calcular a duração total dos serviços solicitados
     let totalDurationMinutes = 0;
-    
+
     if (serviceIds && serviceIds.length > 0) {
         const servicesQuery = `
             SELECT serv_duracao FROM servicos WHERE serv_id = ANY($1::int[])
         `;
         const resServices = await client.query(servicesQuery, [serviceIds]);
-        
+
         resServices.rows.forEach(s => {
             totalDurationMinutes += timeToMinutes(s.serv_duracao);
         });
@@ -46,13 +46,13 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     const endMin = startMin + totalDurationMinutes;
 
     // --- NOVA VALIDAÇÃO: HORÁRIO DE EXPEDIENTE E ALMOÇO ---
-    
+
     // Definição dos turnos em minutos
     const MANHA_INICIO = 7 * 60;  // 07:00 (420)
-    const MANHA_FIM    = 11 * 60; // 11:00 (660)
-    
+    const MANHA_FIM = 11 * 60; // 11:00 (660)
+
     const TARDE_INICIO = 13 * 60; // 13:00 (780)
-    const TARDE_FIM    = 18 * 60; // 18:00 (1080)
+    const TARDE_FIM = 18 * 60; // 18:00 (1080)
 
     // Verifica se cabe INTEIRO na manhã OU cabe INTEIRO na tarde
     const fitsInMorning = (startMin >= MANHA_INICIO && endMin <= MANHA_FIM);
@@ -61,7 +61,7 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     if (!fitsInMorning && !fitsInAfternoon) {
         // Vamos dar uma mensagem bem específica para ajudar o usuário
         const fimFormatado = addMinutesToTime(agendHorario, totalDurationMinutes);
-        
+
         if (startMin < MANHA_INICIO || endMin > TARDE_FIM) {
             throw new Error(`Fora do expediente! A oficina funciona das 07:00 às 11:00 e das 13:00 às 18:00.`);
         } else {
@@ -95,12 +95,12 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     // 3. Comparar conflitos com outros carros
     for (const agend of existingRes.rows) {
         const existStartMin = timeToMinutes(agend.agend_horario);
-        const existDuration = parseFloat(agend.duracao_total_min) || 30; 
+        const existDuration = parseFloat(agend.duracao_total_min) || 30;
         const existEndMin = existStartMin + existDuration;
 
         if (isOverlapping(startMin, endMin, existStartMin, existEndMin)) {
             const fimAgend = addMinutesToTime(agend.agend_horario, existDuration);
-            throw new Error(`Conflito de horário! Já existe um agendamento (Placa: ${agend.veic_placa}) ocupando das ${agend.agend_horario.substring(0,5)} às ${fimAgend}.`);
+            throw new Error(`Conflito de horário! Já existe um agendamento (Placa: ${agend.veic_placa}) ocupando das ${agend.agend_horario.substring(0, 5)} às ${fimAgend}.`);
         }
     }
 };
@@ -108,11 +108,11 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
 
 // GET /appointments
 export const listAppointments = async (req, res, next) => {
-  try {
-    const { search, date, status, page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    try {
+        const { search, date, status, page = 1, limit = 10 } = req.query;
+        const offset = (page - 1) * limit;
 
-    let baseQuery = `
+        let baseQuery = `
       FROM agendamentos a
       JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
       JOIN usuarios u ON vu.usu_id = u.usu_id
@@ -121,29 +121,29 @@ export const listAppointments = async (req, res, next) => {
       LEFT JOIN servicos s ON ags.serv_id = s.serv_id
     `;
 
-    const conditions = [];
-    const values = [];
-    let paramCounter = 1;
+        const conditions = [];
+        const values = [];
+        let paramCounter = 1;
 
-    if (search) {
-      conditions.push(`(u.usu_nome ILIKE $${paramCounter} OR v.veic_placa ILIKE $${paramCounter})`);
-      values.push(`%${search}%`);
-      paramCounter++;
-    }
-    if (date) {
-      conditions.push(`a.agend_data = $${paramCounter}`);
-      values.push(date);
-      paramCounter++;
-    }
-    if (status) {
-      conditions.push(`a.agend_situacao = $${paramCounter}`);
-      values.push(status);
-      paramCounter++;
-    }
+        if (search) {
+            conditions.push(`(u.usu_nome ILIKE $${paramCounter} OR v.veic_placa ILIKE $${paramCounter})`);
+            values.push(`%${search}%`);
+            paramCounter++;
+        }
+        if (date) {
+            conditions.push(`a.agend_data = $${paramCounter}`);
+            values.push(date);
+            paramCounter++;
+        }
+        if (status) {
+            conditions.push(`a.agend_situacao = $${paramCounter}`);
+            values.push(status);
+            paramCounter++;
+        }
 
-    const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+        const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 
-    let queryText = `
+        let queryText = `
       SELECT 
         a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
         v.veic_placa, u.usu_nome,
@@ -153,35 +153,35 @@ export const listAppointments = async (req, res, next) => {
       GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, v.veic_placa, u.usu_nome 
     `;
 
-    let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
+        let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
 
-    queryText += ` ORDER BY a.agend_data DESC, a.agend_horario DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
-    values.push(limit, offset);
+        queryText += ` ORDER BY a.agend_data DESC, a.agend_horario DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+        values.push(limit, offset);
 
-    const result = await pool.query(queryText, values);
-    const countValues = values.slice(0, paramCounter - 1); 
-    const countResult = await pool.query(countQuery, countValues);
+        const result = await pool.query(queryText, values);
+        const countValues = values.slice(0, paramCounter - 1);
+        const countResult = await pool.query(countQuery, countValues);
 
-    const totalItems = parseInt(countResult.rows[0]?.total || 0);
-    const totalPages = Math.ceil(totalItems / limit);
+        const totalItems = parseInt(countResult.rows[0]?.total || 0);
+        const totalPages = Math.ceil(totalItems / limit);
 
-    return res.status(200).json({
-      status: 'success',
-      data: result.rows,
-      meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
-    });
+        return res.status(200).json({
+            status: 'success',
+            data: result.rows,
+            meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
+        });
 
-  } catch (error) {
-    console.error("ERRO LISTAGEM AGENDAMENTOS:", error);
-    next(error);
-  }
+    } catch (error) {
+        console.error("ERRO LISTAGEM AGENDAMENTOS:", error);
+        next(error);
+    }
 };
 
 // GET /appointments/:id
 export const getAppointmentById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const queryMain = `
+    try {
+        const { id } = req.params;
+        const queryMain = `
       SELECT 
         a.*, u.usu_nome, u.usu_telefone, m.mod_nome AS veic_modelo, v.veic_placa
       FROM agendamentos a
@@ -191,29 +191,29 @@ export const getAppointmentById = async (req, res, next) => {
       JOIN modelos m ON v.mod_id = m.mod_id
       WHERE a.agend_id = $1
     `;
-    const resultMain = await pool.query(queryMain, [id]);
+        const resultMain = await pool.query(queryMain, [id]);
 
-    if (resultMain.rows.length === 0) {
-      return res.status(404).json({ message: 'Agendamento não encontrado' });
-    }
+        if (resultMain.rows.length === 0) {
+            return res.status(404).json({ message: 'Agendamento não encontrado' });
+        }
 
-    const queryServices = `
+        const queryServices = `
         SELECT ags.agend_serv_id, s.serv_id, s.serv_nome, s.serv_preco, sit.agend_serv_situ_nome
         FROM agenda_servicos ags
         JOIN servicos s ON ags.serv_id = s.serv_id
         JOIN agenda_servicos_situacao sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
         WHERE ags.agend_id = $1
     `;
-    const resultServices = await pool.query(queryServices, [id]);
+        const resultServices = await pool.query(queryServices, [id]);
 
-    return res.json({ 
-        status: 'success', 
-        data: { ...resultMain.rows[0], servicos: resultServices.rows } 
-    });
+        return res.json({
+            status: 'success',
+            data: { ...resultMain.rows[0], servicos: resultServices.rows }
+        });
 
-  } catch (error) {
-    next(error);
-  }
+    } catch (error) {
+        next(error);
+    }
 };
 
 // POST /appointments (COM VALIDAÇÃO DE CONFLITO)
@@ -243,7 +243,7 @@ export const createAppointment = async (req, res, next) => {
                 await client.query(`
                     INSERT INTO agenda_servicos (agend_id, serv_id, agend_serv_situ_id)
                     VALUES ($1, $2, 1) 
-                `, [newAgendId, servId]); 
+                `, [newAgendId, servId]);
             }
         }
 
@@ -257,17 +257,17 @@ export const createAppointment = async (req, res, next) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
-        
+
         // --- ATUALIZAÇÃO AQUI ---
         // Verifica se é erro de Conflito, Expediente ou Almoço
-        if (error.message.includes("Conflito de horário") || 
-            error.message.includes("Fora do expediente") || 
+        if (error.message.includes("Conflito de horário") ||
+            error.message.includes("Fora do expediente") ||
             error.message.includes("Horário de Almoço")) {
-            
+
             // Retorna 400 (Bad Request) para o frontend saber que é aviso
             return res.status(400).json({ status: 'error', message: error.message });
         }
-        
+
         console.error("Erro interno:", error);
         next(error);
     } finally {
@@ -286,13 +286,13 @@ export const updateAppointment = async (req, res, next) => {
         // Precisamos saber quais serviços estarão valendo para calcular a duração.
         // Se o usuário mandou 'services' no body, usamos eles.
         // Se NÃO mandou (só editou horário), precisamos buscar os serviços que já existem no banco.
-        
+
         let effectiveServicesIds = services;
-        
+
         if (!effectiveServicesIds) {
             // Busca serviços atuais do agendamento
             const currentServicesRes = await client.query(
-                `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`, 
+                `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`,
                 [id]
             );
             effectiveServicesIds = currentServicesRes.rows.map(row => row.serv_id);
@@ -337,17 +337,16 @@ export const updateAppointment = async (req, res, next) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
-        
-        // --- ATUALIZAÇÃO AQUI ---
+
         // Verifica se é erro de Conflito, Expediente ou Almoço
-        if (error.message.includes("Conflito de horário") || 
-            error.message.includes("Fora do expediente") || 
+        if (error.message.includes("Conflito de horário") ||
+            error.message.includes("Fora do expediente") ||
             error.message.includes("Horário de Almoço")) {
-            
+
             // Retorna 400 (Bad Request) para o frontend saber que é aviso
             return res.status(400).json({ status: 'error', message: error.message });
         }
-        
+
         console.error("Erro interno:", error);
         next(error);
     }
