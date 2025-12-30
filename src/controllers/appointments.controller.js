@@ -23,16 +23,13 @@ const isOverlapping = (startA, endA, startB, endB) => {
     return (startA < endB) && (endA > startB);
 };
 
-// Função Principal de Validação de Conflito
+// Função Principal de Validação de Conflito e Horário de Expediente
 const verificarConflito = async (client, agendData, agendHorario, serviceIds, excludeAgendId = null) => {
-    // 1. Calcular a duração total dos serviços solicitados
-    // Se não tiver serviços (ex: update só de horário), assumimos 0 ou tratamos fora.
-    // Mas aqui vamos buscar a duração no banco.
     
+    // 1. Calcular a duração total dos serviços solicitados
     let totalDurationMinutes = 0;
     
     if (serviceIds && serviceIds.length > 0) {
-        // Busca a duração de cada serviço selecionado
         const servicesQuery = `
             SELECT serv_duracao FROM servicos WHERE serv_id = ANY($1::int[])
         `;
@@ -43,20 +40,42 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
         });
     }
 
-    // Se a duração for 0 (nenhum serviço selecionado), definimos um padrão mínimo de 30 min 
-    // ou deixamos passar (mas ideal é ter duração)
-    if (totalDurationMinutes === 0) totalDurationMinutes = 30;
+    if (totalDurationMinutes === 0) totalDurationMinutes = 30; // Mínimo de 30 min se não tiver serviço
 
-    const newStartMin = timeToMinutes(agendHorario);
-    const newEndMin = newStartMin + totalDurationMinutes;
+    const startMin = timeToMinutes(agendHorario);
+    const endMin = startMin + totalDurationMinutes;
 
-    // 2. Buscar TODOS os agendamentos ativos daquele dia
-    // (Trazemos também os serviços deles para calcular a duração de cada um)
+    // --- NOVA VALIDAÇÃO: HORÁRIO DE EXPEDIENTE E ALMOÇO ---
+    
+    // Definição dos turnos em minutos
+    const MANHA_INICIO = 7 * 60;  // 07:00 (420)
+    const MANHA_FIM    = 11 * 60; // 11:00 (660)
+    
+    const TARDE_INICIO = 13 * 60; // 13:00 (780)
+    const TARDE_FIM    = 18 * 60; // 18:00 (1080)
+
+    // Verifica se cabe INTEIRO na manhã OU cabe INTEIRO na tarde
+    const fitsInMorning = (startMin >= MANHA_INICIO && endMin <= MANHA_FIM);
+    const fitsInAfternoon = (startMin >= TARDE_INICIO && endMin <= TARDE_FIM);
+
+    if (!fitsInMorning && !fitsInAfternoon) {
+        // Vamos dar uma mensagem bem específica para ajudar o usuário
+        const fimFormatado = addMinutesToTime(agendHorario, totalDurationMinutes);
+        
+        if (startMin < MANHA_INICIO || endMin > TARDE_FIM) {
+            throw new Error(`Fora do expediente! A oficina funciona das 07:00 às 11:00 e das 13:00 às 18:00.`);
+        } else {
+            throw new Error(`Horário de Almoço! O serviço terminaria às ${fimFormatado}, invadindo a pausa (11h-13h).`);
+        }
+    }
+    // -----------------------------------------------------
+
+    // 2. Se passou no horário, agora busca conflitos com OUTROS agendamentos no banco
     const existingQuery = `
         SELECT 
             a.agend_id, 
             a.agend_horario, 
-            v.veic_id,    
+            v.veic_id,
             v.veic_placa,
             SUM(EXTRACT(EPOCH FROM s.serv_duracao)/60) as duracao_total_min
         FROM agendamentos a
@@ -73,20 +92,18 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     const params = excludeAgendId ? [agendData, excludeAgendId] : [agendData];
     const existingRes = await client.query(existingQuery, params);
 
-    // 3. Comparar conflitos
+    // 3. Comparar conflitos com outros carros
     for (const agend of existingRes.rows) {
         const existStartMin = timeToMinutes(agend.agend_horario);
-        // Se o agendamento existente não tiver serviços, assume 30min padrão
         const existDuration = parseFloat(agend.duracao_total_min) || 30; 
         const existEndMin = existStartMin + existDuration;
 
-        if (isOverlapping(newStartMin, newEndMin, existStartMin, existEndMin)) {
-            const fimFormatado = addMinutesToTime(agend.agend_horario, existDuration);
-            throw new Error(`Conflito de horário! Já existe um agendamento (Placa: ${agend.veic_placa}) das ${agend.agend_horario.substring(0,5)} às ${fimFormatado}.`);
+        if (isOverlapping(startMin, endMin, existStartMin, existEndMin)) {
+            const fimAgend = addMinutesToTime(agend.agend_horario, existDuration);
+            throw new Error(`Conflito de horário! Já existe um agendamento (Placa: ${agend.veic_placa}) ocupando das ${agend.agend_horario.substring(0,5)} às ${fimAgend}.`);
         }
     }
 };
-
 // --- CONTROLLERS ---
 
 // GET /appointments
@@ -240,10 +257,18 @@ export const createAppointment = async (req, res, next) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
-        // Se for erro de validação (nossa msg customizada), retorna 400
-        if (error.message.includes("Conflito de horário")) {
+        
+        // --- ATUALIZAÇÃO AQUI ---
+        // Verifica se é erro de Conflito, Expediente ou Almoço
+        if (error.message.includes("Conflito de horário") || 
+            error.message.includes("Fora do expediente") || 
+            error.message.includes("Horário de Almoço")) {
+            
+            // Retorna 400 (Bad Request) para o frontend saber que é aviso
             return res.status(400).json({ status: 'error', message: error.message });
         }
+        
+        console.error("Erro interno:", error);
         next(error);
     } finally {
         client.release();
@@ -312,13 +337,19 @@ export const updateAppointment = async (req, res, next) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
-        if (error.message.includes("Conflito de horário")) {
+        
+        // --- ATUALIZAÇÃO AQUI ---
+        // Verifica se é erro de Conflito, Expediente ou Almoço
+        if (error.message.includes("Conflito de horário") || 
+            error.message.includes("Fora do expediente") || 
+            error.message.includes("Horário de Almoço")) {
+            
+            // Retorna 400 (Bad Request) para o frontend saber que é aviso
             return res.status(400).json({ status: 'error', message: error.message });
         }
-        console.error("Erro ao atualizar:", error);
+        
+        console.error("Erro interno:", error);
         next(error);
-    } finally {
-        client.release();
     }
 };
 
