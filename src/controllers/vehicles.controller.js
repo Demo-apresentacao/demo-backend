@@ -55,7 +55,7 @@ export const listVehicles = async (req, res, next) => {
         // 5. Montar a Query PRINCIPAL
         // Ordem Obrigatória do SQL: SELECT -> JOINS -> WHERE -> GROUP BY -> ORDER BY -> LIMIT/OFFSET
         let queryText = `${selectFields} ${joinClause} ${whereClause} ${groupByClause} ORDER BY v.veic_id DESC`;
-        
+
         // Lógica de parâmetros para Limit/Offset
         if (search) {
             queryText += ` LIMIT $2 OFFSET $3`;
@@ -96,6 +96,7 @@ export const getVehicleById = async (req, res, next) => {
 
         const query = `
            SELECT v.veic_id,
+                  c.cat_id,
                   mo.mod_id,
                   mo.mod_nome,
                   v.veic_placa,
@@ -104,6 +105,7 @@ export const getVehicleById = async (req, res, next) => {
                   v.veic_combustivel,
                   v.veic_observ,
                   v.veic_situacao,
+                  m.mar_id,
                   m.mar_nome,
                   c.cat_nome,
                   STRING_AGG(DISTINCT u.usu_nome, ', ') AS proprietarios,
@@ -116,8 +118,10 @@ export const getVehicleById = async (req, res, next) => {
         LEFT JOIN usuarios        AS u ON vu.usu_id  = u.usu_id
             WHERE v.veic_id = $1
          GROUP BY v.veic_id,
+                  c.cat_id,
                   mo.mod_id,
                   mo.mod_nome,
+                  m.mar_id,
                   m.mar_nome,
                   c.cat_nome;
     `;
@@ -153,6 +157,15 @@ export const createVehicle = async (req, res, next) => {
             veic_observ,
             veic_situacao
         } = req.body;
+
+
+        const currentYear = new Date().getFullYear();
+        if (parseInt(veic_ano) > currentYear + 1) {
+            return res.status(400).json({
+                status: 'error',
+                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
+            });
+        }
 
         const checkQuery = `
         SELECT veic_id
@@ -220,6 +233,15 @@ export const updateVehicleByUser = async (req, res, next) => {
             veic_observ
         } = req.body;
 
+
+        const currentYear = new Date().getFullYear();
+        if (parseInt(veic_ano) > currentYear + 1) {
+            return res.status(400).json({
+                status: 'error',
+                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
+            });
+        }
+
         const query = `
       UPDATE veiculos
       SET
@@ -271,6 +293,14 @@ export const updateVehicleByAdmin = async (req, res, next) => {
             veic_observ,
             veic_situacao
         } = req.body;
+
+        const currentYear = new Date().getFullYear();
+        if (parseInt(veic_ano) > currentYear + 1) {
+            return res.status(400).json({
+                status: 'error',
+                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
+            });
+        }
 
         const query = `
       UPDATE veiculos
