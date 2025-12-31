@@ -341,13 +341,18 @@ export const deleteUser = async (req, res, next) => {
 export const getUserVehicles = async (req, res, next) => {
     try {
         const { id } = req.params;
+        
+        // Adicionamos: AND vu.data_final IS NULL
         const query = `
             SELECT v.veic_id, v.veic_placa, m.mod_nome, vu.veic_usu_id
             FROM veiculo_usuario vu
             JOIN veiculos v ON vu.veic_id = v.veic_id
             JOIN modelos m ON v.mod_id = m.mod_id
-            WHERE vu.usu_id = $1 AND v.veic_situacao = true
+            WHERE vu.usu_id = $1 
+              AND v.veic_situacao = true
+              AND vu.data_final IS NULL
         `;
+        
         const result = await pool.query(query, [id]);
         return res.json(result.rows);
     } catch (error) {
