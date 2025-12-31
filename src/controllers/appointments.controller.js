@@ -73,20 +73,20 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     // 2. Se passou no horário, agora busca conflitos com OUTROS agendamentos no banco
     const existingQuery = `
         SELECT 
-            a.agend_id, 
-            a.agend_horario, 
-            v.veic_id,
-            v.veic_placa,
-            SUM(EXTRACT(EPOCH FROM s.serv_duracao)/60) as duracao_total_min
-        FROM agendamentos a
-        JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-        JOIN veiculos v ON vu.veic_id = v.veic_id
-        LEFT JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
-        LEFT JOIN servicos s ON ags.serv_id = s.serv_id
-        WHERE a.agend_data = $1 
-          AND a.agend_situacao != 0 
-          ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
-        GROUP BY a.agend_id, a.agend_horario, v.veic_placa, v.veic_id
+             a.agend_id, 
+             a.agend_horario, 
+             v.veic_id,
+             v.veic_placa,
+             SUM(EXTRACT(EPOCH FROM s.serv_duracao)/60) as duracao_total_min
+             FROM agendamentos    AS a
+             JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
+             JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
+        LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
+        LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+            WHERE a.agend_data = $1 
+              AND a.agend_situacao != 0 
+         ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
+         GROUP BY a.agend_id, a.agend_horario, v.veic_placa, v.veic_id
     `;
 
     const params = excludeAgendId ? [agendData, excludeAgendId] : [agendData];
@@ -109,17 +109,47 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
 // GET /appointments
 export const listAppointments = async (req, res, next) => {
     try {
-        const { search, date, status, page = 1, limit = 10 } = req.query;
+        const {
+            search,
+            date,
+            status,
+            page = 1,
+            limit = 10,
+            orderBy = 'agend_data',
+            orderDirection = 'DESC'
+        } = req.query;
+
         const offset = (page - 1) * limit;
 
+        // --- MAPA DE ORDENAÇÃO ---
+        // Traduz o campo do frontend para o campo do banco com alias
+        const sortMap = {
+            'agend_id': 'a.agend_id',
+            'veic_placa': 'v.veic_placa',
+            'agend_data': 'a.agend_data',
+            'agend_horario': 'a.agend_horario',
+            'usu_nome': 'u.usu_nome',
+            'agend_situacao': 'a.agend_situacao'
+        };
+
+        // Validação de segurança
+        const safeOrderBy = sortMap[orderBy] || 'a.agend_data';
+        const safeDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+        // Se ordenar por data, adicionamos horário como desempate
+        let orderByClause = `ORDER BY ${safeOrderBy} ${safeDirection}`;
+        if (safeOrderBy === 'a.agend_data') {
+            orderByClause += `, a.agend_horario ${safeDirection}`;
+        }
+
         let baseQuery = `
-      FROM agendamentos a
-      JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-      JOIN usuarios u ON vu.usu_id = u.usu_id
-      JOIN veiculos v ON vu.veic_id = v.veic_id
-      LEFT JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
-      LEFT JOIN servicos s ON ags.serv_id = s.serv_id
-    `;
+               FROM agendamentos    AS a
+               JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
+               JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
+               JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
+          LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
+          LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+        `;
 
         const conditions = [];
         const values = [];
@@ -144,18 +174,19 @@ export const listAppointments = async (req, res, next) => {
         const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 
         let queryText = `
-      SELECT 
-        a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
-        v.veic_placa, u.usu_nome,
-        STRING_AGG(s.serv_nome, ', ') AS lista_servicos
-      ${baseQuery}
-      ${whereClause}
-      GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, v.veic_placa, u.usu_nome 
-    `;
+          SELECT 
+            a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
+            v.veic_placa, u.usu_nome,
+            STRING_AGG(s.serv_nome, ', ') AS lista_servicos
+          ${baseQuery}
+          ${whereClause}
+          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, v.veic_placa, u.usu_nome 
+        `;
 
         let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
 
-        queryText += ` ORDER BY a.agend_data DESC, a.agend_horario DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+        // Aplica a ordenação dinâmica
+        queryText += ` ${orderByClause} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
         values.push(limit, offset);
 
         const result = await pool.query(queryText, values);
@@ -182,14 +213,18 @@ export const getAppointmentById = async (req, res, next) => {
     try {
         const { id } = req.params;
         const queryMain = `
-      SELECT 
-        a.*, u.usu_nome, u.usu_telefone, m.mod_nome AS veic_modelo, v.veic_placa
-      FROM agendamentos a
-      JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-      JOIN usuarios u ON vu.usu_id = u.usu_id
-      JOIN veiculos v ON vu.veic_id = v.veic_id
-      JOIN modelos m ON v.mod_id = m.mod_id
-      WHERE a.agend_id = $1
+           SELECT 
+                 a.*, 
+                 u.usu_nome, 
+                 u.usu_telefone, 
+                 m.mod_nome AS veic_modelo, 
+                 v.veic_placa
+            FROM agendamentos    AS a
+            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+            JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
+            JOIN veiculos        AS v ON vu.veic_id     = v.veic_id
+            JOIN modelos         AS m ON v.mod_id       = m.mod_id
+           WHERE a.agend_id = $1
     `;
         const resultMain = await pool.query(queryMain, [id]);
 
@@ -198,11 +233,15 @@ export const getAppointmentById = async (req, res, next) => {
         }
 
         const queryServices = `
-        SELECT ags.agend_serv_id, s.serv_id, s.serv_nome, s.serv_preco, sit.agend_serv_situ_nome
-        FROM agenda_servicos ags
-        JOIN servicos s ON ags.serv_id = s.serv_id
-        JOIN agenda_servicos_situacao sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
-        WHERE ags.agend_id = $1
+        SELECT ags.agend_serv_id, 
+               s.serv_id, 
+               s.serv_nome, 
+               s.serv_preco,
+               sit.agend_serv_situ_nome
+        FROM   agenda_servicos ags
+        JOIN   servicos AS s ON ags.serv_id = s.serv_id
+        JOIN   agenda_servicos_situacao sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
+        WHERE  ags.agend_id = $1
     `;
         const resultServices = await pool.query(queryServices, [id]);
 
