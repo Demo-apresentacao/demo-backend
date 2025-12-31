@@ -4,35 +4,46 @@ import pool from '../config/db.js';
 // Lista todos os veículos
 export const listVehicles = async (req, res, next) => {
   try {
-
-    // 2. Extração manual para garantir que não tem valor padrão escondendo erro
     const search = req.query.search || '';
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     
-    // TRUQUE: Se status vier undefined, assume 'all'. Se vier string, usa ela.
+    // Status
     let status = req.query.status;
     if (!status || status === 'null' || status === 'undefined') {
         status = 'all';
     }
 
+    // Novos parâmetros de Ordenação
+    const { orderBy = 'veic_id', orderDirection = 'DESC' } = req.query;
+
+    // --- MAPA DE ORDENAÇÃO ---
+    // Traduz o campo do frontend para o campo do banco com alias correto
+    const sortMap = {
+        'veic_id': 'v.veic_id',
+        'modelo': 'mo.mod_nome',
+        'marca': 'm.mar_nome',
+        'veic_placa': 'v.veic_placa',
+        'veic_situacao': 'v.veic_situacao'
+        // 'proprietarios' é complexo de ordenar pois é um agregado, melhor não incluir por enquanto
+    };
+
+    const safeOrderBy = sortMap[orderBy] || 'v.veic_id';
+    const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const offset = (page - 1) * limit;
     const conditions = [];
     const values = [];
     let paramIndex = 1;
 
-    // 3. A Lógica do Filtro (Simplificada e Blindada)
+    // Filtros
     if (status !== 'all') {
-      
-      const isActive = (status === 'active'); // true se 'active', false se 'inactive'
-      
+      const isActive = (status === 'active');
       conditions.push(`v.veic_situacao = $${paramIndex}`);
       values.push(isActive);
       paramIndex++;
     } 
 
-    // 4. Filtro de Busca (Search)
     if (search) {
       conditions.push(`
         (
@@ -46,12 +57,9 @@ export const listVehicles = async (req, res, next) => {
       paramIndex++;
     }
 
-    // 5. Monta o WHERE
-    const whereClause = conditions.length
-      ? `WHERE ${conditions.join(' AND ')}`
-      : '';
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // 6. Query Principal (Usei LEFT JOIN para evitar sumir dados com erro de cadastro)
+    // Query Principal
     const queryText = `
       SELECT
         v.veic_id,
@@ -74,13 +82,12 @@ export const listVehicles = async (req, res, next) => {
       GROUP BY
         v.veic_id, mo.mod_nome, m.mar_nome, v.veic_placa,
         v.veic_ano, v.veic_cor, v.veic_combustivel, v.veic_observ, v.veic_situacao
-      ORDER BY v.veic_id DESC
+      ORDER BY ${safeOrderBy} ${safeOrderDirection}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
     values.push(limit, offset);
 
-    // Executa
     const result = await pool.query(queryText, values);
 
     // Query de Contagem
@@ -94,7 +101,6 @@ export const listVehicles = async (req, res, next) => {
       ${whereClause}
     `;
 
-    // Remove limit e offset dos values para o count
     const countValues = values.slice(0, paramIndex - 1);
     const countResult = await pool.query(countQuery, countValues);
 
@@ -104,12 +110,7 @@ export const listVehicles = async (req, res, next) => {
     return res.status(200).json({
       status: 'success',
       data: result.rows,
-      meta: {
-        totalItems,
-        totalPages,
-        currentPage: page,
-        itemsPerPage: limit,
-      },
+      meta: { totalItems, totalPages, currentPage: page, itemsPerPage: limit },
     });
 
   } catch (error) {
