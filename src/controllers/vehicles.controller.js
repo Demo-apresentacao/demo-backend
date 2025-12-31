@@ -3,89 +3,119 @@ import pool from '../config/db.js';
 // GET /vehicles
 // Lista todos os veículos
 export const listVehicles = async (req, res, next) => {
-    try {
-        const { search, page = 1, limit = 10 } = req.query;
-        const offset = (page - 1) * limit;
-        const values = [];
+  try {
 
-        // 1. Definir as colunas do SELECT (Campos)
-        const selectFields = `
-            SELECT v.veic_id,
-                   mo.mod_nome AS modelo,
-                   v.veic_placa,
-                   v.veic_ano,
-                   v.veic_cor,
-                   v.veic_combustivel,
-                   v.veic_observ,
-                   v.veic_situacao,
-                   m.mar_nome AS marca,
-                   STRING_AGG(DISTINCT CASE WHEN vu.data_final IS NULL THEN u.usu_nome ELSE NULL END, ', ') AS proprietarios,
-                   COUNT(DISTINCT CASE WHEN vu.data_final IS NULL THEN vu.usu_id ELSE NULL END) AS num_proprietarios
-        `;
-
-        // 2. Definir os JOINS (Necessário tanto para a Lista Principal quanto para a Contagem, pois a busca usa colunas das tabelas unidas)
-        const joinClause = `
-            FROM veiculos AS v
-            JOIN modelos AS mo ON v.mod_id = mo.mod_id
-            JOIN marcas AS m ON mo.mar_id = m.mar_id
-            LEFT JOIN veiculo_usuario AS vu ON v.veic_id = vu.veic_id
-            LEFT JOIN usuarios AS u ON vu.usu_id = u.usu_id
-        `;
-
-        // 3. Definir o GROUP BY (Apenas para a lista principal)
-        const groupByClause = `
-            GROUP BY v.veic_id,
-                     mo.mod_nome,
-                     m.mar_nome,
-                     v.veic_placa,
-                     v.veic_ano,
-                     v.veic_cor,
-                     v.veic_combustivel,
-                     v.veic_observ,
-                     v.veic_situacao
-        `;
-
-        // 4. Construir o WHERE dinamicamente
-        let whereClause = '';
-        if (search) {
-            whereClause = ` WHERE v.veic_placa ILIKE $1 OR mo.mod_nome ILIKE $1 OR m.mar_nome ILIKE $1 OR u.usu_nome ILIKE $1`;
-            values.push(`%${search}%`);
-        }
-
-        // 5. Montar a Query PRINCIPAL
-        // Ordem Obrigatória do SQL: SELECT -> JOINS -> WHERE -> GROUP BY -> ORDER BY -> LIMIT/OFFSET
-        let queryText = `${selectFields} ${joinClause} ${whereClause} ${groupByClause} ORDER BY v.veic_id DESC`;
-
-        // Lógica de parâmetros para Limit/Offset
-        if (search) {
-            queryText += ` LIMIT $2 OFFSET $3`;
-        } else {
-            queryText += ` LIMIT $1 OFFSET $2`;
-        }
-        values.push(limit, offset);
-
-        // 6. Montar a Query de CONTAGEM (Count)
-        // Devemos usar COUNT(DISTINCT v.veic_id) para evitar duplicatas geradas pelos joins
-        // Devemos incluir os 'joinClause' porque o WHERE usa tabelas como 'modelos' e 'usuarios'
-        let countQueryText = `SELECT COUNT(DISTINCT v.veic_id) AS total ${joinClause} ${whereClause}`;
-        const countValues = search ? [`%${search}%`] : [];
-
-        // Executar Queries
-        const result = await pool.query(queryText, values);
-        const countResult = await pool.query(countQueryText, countValues);
-
-        const totalItems = parseInt(countResult.rows[0].total);
-        const totalPages = Math.ceil(totalItems / limit);
-
-        return res.status(200).json({
-            status: 'success',
-            data: result.rows,
-            meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
-        });
-
-    } catch (error) {
-        next(error);
+    // 2. Extração manual para garantir que não tem valor padrão escondendo erro
+    const search = req.query.search || '';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // TRUQUE: Se status vier undefined, assume 'all'. Se vier string, usa ela.
+    let status = req.query.status;
+    if (!status || status === 'null' || status === 'undefined') {
+        status = 'all';
     }
+
+
+    const offset = (page - 1) * limit;
+    const conditions = [];
+    const values = [];
+    let paramIndex = 1;
+
+    // 3. A Lógica do Filtro (Simplificada e Blindada)
+    if (status !== 'all') {
+      
+      const isActive = (status === 'active'); // true se 'active', false se 'inactive'
+      
+      conditions.push(`v.veic_situacao = $${paramIndex}`);
+      values.push(isActive);
+      paramIndex++;
+    } 
+
+    // 4. Filtro de Busca (Search)
+    if (search) {
+      conditions.push(`
+        (
+          v.veic_placa ILIKE $${paramIndex}
+          OR mo.mod_nome ILIKE $${paramIndex}
+          OR m.mar_nome ILIKE $${paramIndex}
+          OR u.usu_nome ILIKE $${paramIndex}
+        )
+      `);
+      values.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    // 5. Monta o WHERE
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '';
+
+    // 6. Query Principal (Usei LEFT JOIN para evitar sumir dados com erro de cadastro)
+    const queryText = `
+      SELECT
+        v.veic_id,
+        mo.mod_nome AS modelo,
+        v.veic_placa,
+        v.veic_ano,
+        v.veic_cor,
+        v.veic_combustivel,
+        v.veic_observ,
+        v.veic_situacao,
+        m.mar_nome AS marca,
+        STRING_AGG(DISTINCT u.usu_nome, ', ') AS proprietarios,
+        COUNT(DISTINCT u.usu_id) AS num_proprietarios
+      FROM veiculos v
+      LEFT JOIN modelos mo ON v.mod_id = mo.mod_id
+      LEFT JOIN marcas m ON mo.mar_id = m.mar_id
+      LEFT JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id AND vu.data_final IS NULL
+      LEFT JOIN usuarios u ON vu.usu_id = u.usu_id
+      ${whereClause}
+      GROUP BY
+        v.veic_id, mo.mod_nome, m.mar_nome, v.veic_placa,
+        v.veic_ano, v.veic_cor, v.veic_combustivel, v.veic_observ, v.veic_situacao
+      ORDER BY v.veic_id DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    values.push(limit, offset);
+
+    // Executa
+    const result = await pool.query(queryText, values);
+
+    // Query de Contagem
+    const countQuery = `
+      SELECT COUNT(DISTINCT v.veic_id) AS total
+      FROM veiculos v
+      LEFT JOIN modelos mo ON v.mod_id = mo.mod_id
+      LEFT JOIN marcas m ON mo.mar_id = m.mar_id
+      LEFT JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id AND vu.data_final IS NULL
+      LEFT JOIN usuarios u ON vu.usu_id = u.usu_id
+      ${whereClause}
+    `;
+
+    // Remove limit e offset dos values para o count
+    const countValues = values.slice(0, paramIndex - 1);
+    const countResult = await pool.query(countQuery, countValues);
+
+    const totalItems = Number(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return res.status(200).json({
+      status: 'success',
+      data: result.rows,
+      meta: {
+        totalItems,
+        totalPages,
+        currentPage: page,
+        itemsPerPage: limit,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ ERRO GRAVE NO CONTROLLER:", error);
+    next(error);
+  }
 };
 
 // GET /vehicles/:id
@@ -339,6 +369,30 @@ export const updateVehicleByAdmin = async (req, res, next) => {
     }
 };
 
+
+// PATCH /vehicles/:veic_id/status
+// Ativa ou desativa um veículo 
+export const toggleVehicleStatus = async (req, res, next) => {
+    try {
+        const { veic_id } = req.params;
+        const { veic_situacao } = req.body;
+
+        const query = `
+      UPDATE veiculos
+      SET veic_situacao = $1
+      WHERE veic_id = $2;
+    `;
+
+        await pool.query(query, [veic_situacao, veic_id]);
+        return res.json({
+            status: 'success',
+            message: `Veículo ${veic_id} ${veic_situacao ? 'ativado' : 'desativado'
+                } com sucesso`
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 
 // DELETE /vehicles/:id
