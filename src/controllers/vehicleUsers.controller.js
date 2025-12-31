@@ -114,6 +114,35 @@ export const createVehicleUser = async (req, res, next) => {
   try {
     const { veic_id, usu_id, ehproprietario, data_inicial } = req.body;
 
+    // --- VALIDAÇÃO DE DATA NO BACKEND (Segurança Extra) ---
+    const today = new Date();
+    const inputDate = new Date(data_inicial);
+    if (inputDate > today) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'A data inicial não pode ser futura.'
+        });
+    }
+
+    // --- VALIDAÇÃO DE DUPLICIDADE ATIVA ---
+    // Verifica se JÁ EXISTE um registro para este veículo + usuário onde data_final é NULL (Ativo)
+    const checkQuery = `
+        SELECT veic_usu_id FROM veiculo_usuario 
+        WHERE veic_id = $1 
+          AND usu_id = $2 
+          AND data_final IS NULL
+    `;
+    
+    const checkResult = await pool.query(checkQuery, [veic_id, usu_id]);
+
+    if (checkResult.rowCount > 0) {
+        return res.status(409).json({ // 409 Conflict
+            status: 'error',
+            message: 'Este usuário já possui um vínculo ativo com este veículo. Encerre o vínculo anterior antes de criar um novo.'
+        });
+    }
+
+    // --- INSERÇÃO ---
     const query = `
       INSERT INTO veiculo_usuario
         (veic_id, usu_id, ehproprietario, data_inicial)
@@ -147,12 +176,62 @@ export const updateVehicleUser = async (req, res, next) => {
     const { id } = req.params;
     const { data_inicial, data_final, ehproprietario } = req.body;
 
-    // 1. Array para guardar os campos que VAMOS atualizar
+    // --- PASSO 1: BUSCAR O REGISTRO ATUAL NO BANCO ---
+    // Precisamos saber o que já existe para comparar datas
+    const currentRecordResult = await pool.query(
+      'SELECT data_inicial, data_final FROM veiculo_usuario WHERE veic_usu_id = $1',
+      [id]
+    );
+
+    if (currentRecordResult.rowCount === 0) {
+      return res.status(404).json({ status: 'error', message: 'Registro não encontrado.' });
+    }
+
+    const currentRecord = currentRecordResult.rows[0];
+
+    // --- PASSO 2: PREPARAR OS DADOS PARA VALIDAÇÃO ---
+    // Se o usuário mandou uma nova data, usa a nova. Se não, usa a que já estava no banco.
+    // Isso simula como o registro ficará DEPOIS do update.
+    
+    const nextDataInicial = data_inicial !== undefined ? data_inicial : currentRecord.data_inicial;
+    const nextDataFinal = data_final !== undefined ? data_final : currentRecord.data_final;
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Ajuste para garantir que "hoje" seja válido até o fim do dia
+
+    // --- PASSO 3: APLICAR REGRAS DE NEGÓCIO ---
+
+    // Validação A: Data Inicial no Futuro
+    if (nextDataInicial && new Date(nextDataInicial) > today) {
+        return res.status(400).json({ 
+            status: 'error', 
+            message: 'A Data Inicial não pode ser maior que a data de hoje.' 
+        });
+    }
+
+    // Validação B: Data Final no Futuro (apenas se existir data final)
+    if (nextDataFinal && new Date(nextDataFinal) > today) {
+        return res.status(400).json({ 
+            status: 'error', 
+            message: 'A Data Final não pode ser maior que a data de hoje.' 
+        });
+    }
+
+    // Validação C: Data Final antes da Inicial
+    if (nextDataInicial && nextDataFinal) {
+        if (new Date(nextDataFinal) < new Date(nextDataInicial)) {
+            return res.status(400).json({ 
+                status: 'error', 
+                message: 'A Data Final não pode ser anterior à Data Inicial.' 
+            });
+        }
+    }
+
+    // --- PASSO 4: MONTAGEM DINÂMICA DA QUERY (Igual fizemos antes) ---
     const fields = [];
     const values = [];
     let paramIndex = 1;
 
-    // 2. Só adiciona na query SE o dado foi enviado
     if (data_inicial !== undefined) {
       fields.push(`data_inicial = $${paramIndex++}`);
       values.push(data_inicial);
@@ -168,18 +247,12 @@ export const updateVehicleUser = async (req, res, next) => {
       values.push(ehproprietario);
     }
 
-    // Se não enviou nada para atualizar, retorna erro ou sucesso vazio
     if (fields.length === 0) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Nenhum campo enviado para atualização.' 
-      });
+      return res.status(400).json({ status: 'error', message: 'Nenhum campo enviado para atualização.' });
     }
 
-    // 3. Adiciona o ID no final dos valores
     values.push(id);
 
-    // 4. Monta a query final
     const query = `
       UPDATE veiculo_usuario
       SET ${fields.join(', ')}
@@ -188,13 +261,6 @@ export const updateVehicleUser = async (req, res, next) => {
     `;
 
     const result = await pool.query(query, values);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ 
-        status: 'error', 
-        message: 'Registro não encontrado.' 
-      });
-    }
 
     return res.json({
       status: 'success',
@@ -205,7 +271,7 @@ export const updateVehicleUser = async (req, res, next) => {
     next(error);
   }
 };
-/**
+/*
  * Remove a associação entre veículo e usuário
  * DELETE /vehicle-users/:id
  */
