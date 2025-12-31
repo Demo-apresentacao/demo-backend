@@ -2,21 +2,38 @@ import pool from '../config/db.js';
 
 // GET /services
 // Lista todos os serviços
-// GET /services
-// Lista todos os serviços COM FILTROS
 export const listServices = async (req, res, next) => {
   try {
-    // 1. Recebe parâmetros (search, page, limit e STATUS)
-    const { search, page = 1, limit = 10, status } = req.query;
+    const { 
+        search, 
+        page = 1, 
+        limit = 10, 
+        status,
+        orderBy = 'serv_id',      // Padrão: ID
+        orderDirection = 'DESC'   // Padrão: Decrescente
+    } = req.query;
+
     const offset = (page - 1) * limit;
 
-    // 2. Base da Query
+    // --- LÓGICA DE ORDENAÇÃO SEGURA ---
+    // Lista de colunas permitidas para evitar SQL Injection
+    const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao'];
+    
+    // Verifica se a coluna enviada é válida, senão usa serv_id
+    const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'serv_id';
+    const safeDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    
+    // Adicionamos o prefixo 's.' para garantir que o banco saiba que é da tabela servicos
+    const orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
+
+
+    // --- MONTAGEM DA QUERY ---
     let queryText = `
       SELECT
-        s.serv_id, s.cat_serv_id, cs.cat_serv_nome, s.serv_nome,
-        s.serv_duracao, s.serv_preco, s.serv_descricao, s.serv_situacao
-      FROM servicos s
-      JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
+            s.serv_id, s.cat_serv_id, cs.cat_serv_nome, s.serv_nome,
+            s.serv_duracao, s.serv_preco, s.serv_descricao, s.serv_situacao
+      FROM  servicos s
+      JOIN  categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
     `;
 
     let countQuery = `
@@ -25,41 +42,38 @@ export const listServices = async (req, res, next) => {
       JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
     `;
 
-    // 3. Montagem Dinâmica do WHERE
     const conditions = [];
     const values = [];
     let paramIndex = 1;
 
-    // Filtro de Texto (Nome ou Descrição)
+    // Filtros
     if (search) {
       conditions.push(`(s.serv_nome ILIKE $${paramIndex} OR s.serv_descricao ILIKE $${paramIndex})`);
       values.push(`%${search}%`);
       paramIndex++;
     }
 
-    // Filtro de Status (active, inactive, all)
     if (status && status !== 'all') {
-      const statusBool = status === 'active'; // true ou false
+      const statusBool = status === 'active';
       conditions.push(`s.serv_situacao = $${paramIndex}`);
       values.push(statusBool);
       paramIndex++;
     }
 
-    // Aplica o WHERE se houver condições
+    // Aplica WHERE
     if (conditions.length > 0) {
       const whereClause = ` WHERE ` + conditions.join(' AND ');
       queryText += whereClause;
       countQuery += whereClause;
     }
 
-    // 4. Ordenação e Paginação
-    queryText += ` ORDER BY s.serv_id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    // Aplica ORDER BY e Paginação
+    queryText += ` ${orderByClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     values.push(limit, offset);
 
-    // 5. Execução
+    // Executa
     const result = await pool.query(queryText, values);
     
-    // Para o count, usamos os values apenas dos filtros (sem limit/offset)
     const countValues = values.slice(0, paramIndex - 1);
     const countResult = await pool.query(countQuery, countValues);
     
@@ -85,19 +99,19 @@ export const listServicesByCategory = async (req, res, next) => {
 
     const query = `
       SELECT
-        s.serv_id,
-        s.cat_serv_id,
-        cs.cat_serv_nome,
-        s.serv_nome,
-        s.serv_duracao,
-        s.serv_preco,
-        s.serv_descricao,
-        s.serv_situacao
-      FROM servicos s
-      JOIN categorias_servicos cs
-        ON s.cat_serv_id = cs.cat_serv_id
-      WHERE s.cat_serv_id = $1
-      ORDER BY s.serv_id;
+              s.serv_id,
+              s.cat_serv_id,
+              cs.cat_serv_nome,
+              s.serv_nome,
+              s.serv_duracao,
+              s.serv_preco,
+              s.serv_descricao,
+              s.serv_situacao
+        FROM  servicos s
+        JOIN  categorias_servicos cs
+          ON  s.cat_serv_id = cs.cat_serv_id
+        WHERE s.cat_serv_id = $1
+        ORDER BY s.serv_id;
     `;
 
     const result = await pool.query(query, [cat_serv_id]);
@@ -119,14 +133,14 @@ export const getServiceById = async (req, res, next) => {
 
     const query = `
       SELECT
-        s.serv_id,
-        s.cat_serv_id,
-        cs.cat_serv_nome,
-        s.serv_nome,
-        s.serv_duracao,
-        s.serv_preco,
-        s.serv_descricao,
-        s.serv_situacao
+              s.serv_id,
+              s.cat_serv_id,
+              cs.cat_serv_nome,
+              s.serv_nome,
+              s.serv_duracao,
+              s.serv_preco,
+              s.serv_descricao,
+              s.serv_situacao
       FROM servicos s
       JOIN categorias_servicos cs
         ON s.cat_serv_id = cs.cat_serv_id

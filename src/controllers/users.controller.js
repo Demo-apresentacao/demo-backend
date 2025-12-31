@@ -64,47 +64,59 @@ function getAgeError(dateString) {
 // ----------------------------------------------------
 export const listUsers = async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 10, status } = req.query; // Recebe 'status'
+    // 1. Recebe parâmetros novos: orderBy e orderDirection
+    const { 
+        search, 
+        page = 1, 
+        limit = 10, 
+        status, 
+        orderBy = 'usu_id', // Padrão: ID
+        orderDirection = 'DESC' // Padrão: Decrescente
+    } = req.query;
+
     const offset = (page - 1) * limit;
+
+    // 2. LISTA DE COLUNAS PERMITIDAS (Segurança contra SQL Injection)
+    // Só aceita ordenar por estes campos. Se tentarem outro, força usu_id.
+    const sortableColumns = ['usu_id', 'usu_nome', 'usu_email', 'usu_situacao', 'usu_acesso'];
+    const safeOrderBy = sortableColumns.includes(orderBy) ? orderBy : 'usu_id';
+    const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     let queryText = `SELECT usu_id, usu_nome, usu_email, usu_telefone, usu_acesso, usu_situacao FROM usuarios`;
     let countQuery = `SELECT COUNT(*) as total FROM usuarios`;
     
-    // Array para guardar as condições do WHERE
     const conditions = [];
     const values = [];
     let paramIndex = 1;
 
-    // 1. Filtro de Texto (Nome ou Email)
+    // Filtros (Texto e Status)
     if (search) {
       conditions.push(`(usu_nome ILIKE $${paramIndex} OR usu_email ILIKE $${paramIndex})`);
       values.push(`%${search}%`);
       paramIndex++;
     }
 
-    // 2. Filtro de Status (active, inactive, all)
     if (status && status !== 'all') {
-      const statusBool = status === 'active'; // se for 'active' vira true, senão false
+      const statusBool = status === 'active';
       conditions.push(`usu_situacao = $${paramIndex}`);
       values.push(statusBool);
       paramIndex++;
     }
 
-    // Monta o WHERE se houver condições
     if (conditions.length > 0) {
       const whereClause = ` WHERE ` + conditions.join(' AND ');
       queryText += whereClause;
       countQuery += whereClause;
     }
 
-    // Paginação
-    queryText += ` ORDER BY usu_id DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    // 3. APLICA A ORDENAÇÃO DINÂMICA
+    // Nota: Como validamos safeOrderBy e safeOrderDirection, podemos interpolar na string
+    queryText += ` ORDER BY ${safeOrderBy} ${safeOrderDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    
     values.push(limit, offset);
 
     const result = await pool.query(queryText, values);
     
-    // Para contar o total, usamos os mesmos valores de filtro (sem limit/offset)
-    // Precisamos de um array novo só com os filtros para o count
     const countValues = values.slice(0, paramIndex - 1); 
     const countResult = await pool.query(countQuery, countValues);
     
