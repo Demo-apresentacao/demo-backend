@@ -147,31 +147,64 @@ export const updateVehicleUser = async (req, res, next) => {
     const { id } = req.params;
     const { data_inicial, data_final, ehproprietario } = req.body;
 
+    // 1. Array para guardar os campos que VAMOS atualizar
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    // 2. Só adiciona na query SE o dado foi enviado
+    if (data_inicial !== undefined) {
+      fields.push(`data_inicial = $${paramIndex++}`);
+      values.push(data_inicial);
+    }
+
+    if (data_final !== undefined) {
+      fields.push(`data_final = $${paramIndex++}`);
+      values.push(data_final);
+    }
+
+    if (ehproprietario !== undefined) {
+      fields.push(`ehproprietario = $${paramIndex++}`);
+      values.push(ehproprietario);
+    }
+
+    // Se não enviou nada para atualizar, retorna erro ou sucesso vazio
+    if (fields.length === 0) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Nenhum campo enviado para atualização.' 
+      });
+    }
+
+    // 3. Adiciona o ID no final dos valores
+    values.push(id);
+
+    // 4. Monta a query final
     const query = `
       UPDATE veiculo_usuario
-      SET
-        data_inicial = $1,
-        data_final = $2,
-        ehproprietario = $3
-      WHERE veic_usu_id = $4;
+      SET ${fields.join(', ')}
+      WHERE veic_usu_id = $${paramIndex}
+      RETURNING *;
     `;
 
-    await pool.query(query, [
-      data_inicial,
-      data_final,
-      ehproprietario,
-      id
-    ]);
+    const result = await pool.query(query, values);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ 
+        status: 'error', 
+        message: 'Registro não encontrado.' 
+      });
+    }
 
     return res.json({
       status: 'success',
-      message: 'Associação atualizada com sucesso.'
+      message: 'Associação atualizada com sucesso.',
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
   }
 };
-
 /**
  * Remove a associação entre veículo e usuário
  * DELETE /vehicle-users/:id
