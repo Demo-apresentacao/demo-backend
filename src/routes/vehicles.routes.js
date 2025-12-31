@@ -1,3 +1,6 @@
+console.log("🚨 ROUTER DE VEÍCULOS CARREGADO 🚨");
+
+
 import { Router } from 'express';
 import {
   listVehicles,
@@ -6,7 +9,8 @@ import {
   deleteVehicle,
   updateVehicleByAdmin,
   updateVehicleByUser,
-  updateVehicleStatus
+  toggleVehicleStatus,
+  // updateVehicleStatus
 } from '../controllers/vehicles.controller.js';
 
 const router = Router();
@@ -30,6 +34,8 @@ router.patch('/:veic_id', updateVehicleByAdmin);
 router.patch('/user/:veic_id', updateVehicleByUser);
 
 // PATCH /vehicles/:id/status
-router.patch('/:id/status', updateVehicleStatus);
+// router.patch('/:id/status', updateVehicleStatus);
+
+router.patch('/:veic_id/status', toggleVehicleStatus);
 
 export default router;
