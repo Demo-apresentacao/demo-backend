@@ -9,23 +9,18 @@ export const listServices = async (req, res, next) => {
         page = 1, 
         limit = 10, 
         status,
-        orderBy = 'serv_id',      // Padrão: ID
-        orderDirection = 'DESC'   // Padrão: Decrescente
+        orderBy = 'serv_id',
+        orderDirection = 'DESC'
     } = req.query;
 
     const offset = (page - 1) * limit;
 
     // --- LÓGICA DE ORDENAÇÃO SEGURA ---
-    // Lista de colunas permitidas para evitar SQL Injection
     const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao'];
-    
-    // Verifica se a coluna enviada é válida, senão usa serv_id
     const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'serv_id';
     const safeDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     
-    // Adicionamos o prefixo 's.' para garantir que o banco saiba que é da tabela servicos
     const orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
-
 
     // --- MONTAGEM DA QUERY ---
     let queryText = `
@@ -111,7 +106,7 @@ export const listServicesByCategory = async (req, res, next) => {
         JOIN  categorias_servicos cs
           ON  s.cat_serv_id = cs.cat_serv_id
         WHERE s.cat_serv_id = $1
-        ORDER BY s.serv_id;
+        ORDER BY s.serv_nome ASC;
     `;
 
     const result = await pool.query(query, [cat_serv_id]);
@@ -174,8 +169,12 @@ export const createService = async (req, res, next) => {
       serv_duracao,
       serv_preco,
       serv_descricao,
-      serv_situacao
+      serv_situacao = true // Default para true
     } = req.body;
+
+    if (!serv_nome || !serv_preco || !cat_serv_id) {
+        return res.status(400).json({ status: 'error', message: "Nome, preço e categoria são obrigatórios." });
+    }
 
     const query = `
       INSERT INTO servicos (
@@ -187,7 +186,7 @@ export const createService = async (req, res, next) => {
         serv_situacao
       )
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING serv_id;
+      RETURNING *;
     `;
 
     const values = [
@@ -204,56 +203,63 @@ export const createService = async (req, res, next) => {
     return res.status(201).json({
       status: 'success',
       message: 'Serviço criado com sucesso',
-      data: {
-        serv_id: result.rows[0].serv_id
-      }
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
   }
 };
 
-// PUT /services/:serv_id
-// Atualiza os dados de um serviço
+// PATCH /services/:serv_id
+// Atualiza os dados de um serviço (Dinâmico)
 export const updateService = async (req, res, next) => {
   try {
     const { serv_id } = req.params;
-    const {
-      cat_serv_id,
-      serv_nome,
-      serv_duracao,
-      serv_preco,
-      serv_descricao,
-      serv_situacao
-    } = req.body;
+    const updates = req.body;
+
+    // 1. Verifica se enviou algum dado
+    if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
+    }
+
+    // 2. Montagem Dinâmica da Query
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    const allowedFields = ['cat_serv_id', 'serv_nome', 'serv_duracao', 'serv_preco', 'serv_descricao', 'serv_situacao'];
+
+    for (const key in updates) {
+        if (allowedFields.includes(key)) {
+            fields.push(`${key} = $${index}`);
+            values.push(updates[key]);
+            index++;
+        }
+    }
+
+    if (fields.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo válido para atualização.' });
+    }
+
+    values.push(serv_id);
 
     const query = `
       UPDATE servicos
-      SET
-        cat_serv_id = $1,
-        serv_nome = $2,
-        serv_duracao = $3,
-        serv_preco = $4,
-        serv_descricao = $5,
-        serv_situacao = $6
-      WHERE serv_id = $7;
+      SET ${fields.join(', ')}
+      WHERE serv_id = $${index}
+      RETURNING *;
     `;
 
-    const values = [
-      cat_serv_id,
-      serv_nome,
-      serv_duracao,
-      serv_preco,
-      serv_descricao,
-      serv_situacao,
-      serv_id
-    ];
+    const result = await pool.query(query, values);
 
-    await pool.query(query, values);
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Serviço não encontrado" });
+    }
 
     return res.json({
       status: 'success',
-      message: `Serviço ${serv_id} atualizado com sucesso`
+      message: `Serviço atualizado com sucesso`,
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
@@ -261,25 +267,33 @@ export const updateService = async (req, res, next) => {
 };
 
 // PATCH /services/:serv_id/status
-// Ativa ou desativa um serviço
+// Ativa ou desativa um serviço (Atalho útil)
 export const toggleServiceStatus = async (req, res, next) => {
   try {
     const { serv_id } = req.params;
     const { serv_situacao } = req.body;
 
+    if (serv_situacao === undefined) {
+        return res.status(400).json({ status: 'error', message: "O campo serv_situacao é obrigatório." });
+    }
+
     const query = `
       UPDATE servicos
       SET serv_situacao = $1
-      WHERE serv_id = $2;
+      WHERE serv_id = $2
+      RETURNING *;
     `;
 
-    await pool.query(query, [serv_situacao, serv_id]);
+    const result = await pool.query(query, [serv_situacao, serv_id]);
+
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Serviço não encontrado" });
+    }
 
     return res.json({
       status: 'success',
-      message: `Serviço ${serv_id} ${
-        serv_situacao ? 'ativado' : 'desativado'
-      } com sucesso`
+      message: `Serviço ${serv_situacao ? 'ativado' : 'desativado'} com sucesso`,
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
@@ -294,16 +308,28 @@ export const deleteService = async (req, res, next) => {
 
     const query = `
       DELETE FROM servicos
-      WHERE serv_id = $1;
+      WHERE serv_id = $1
+      RETURNING serv_id;
     `;
 
-    await pool.query(query, [serv_id]);
+    const result = await pool.query(query, [serv_id]);
+
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Serviço não encontrado" });
+    }
 
     return res.json({
       status: 'success',
-      message: `Serviço ${serv_id} removido com sucesso`
+      message: `Serviço removido com sucesso`
     });
   } catch (error) {
+    // Erro de chave estrangeira (se o serviço já foi usado em agendamentos)
+    if (error.code === '23503') {
+        return res.status(409).json({
+            status: 'error',
+            message: 'Não é possível excluir este serviço pois ele já está vinculado a agendamentos.'
+        });
+    }
     next(error);
   }
 };

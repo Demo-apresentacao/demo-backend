@@ -60,24 +60,21 @@ function getAgeError(dateString) {
 // ====================================================
 
 // ----------------------------------------------------
-//  GET LIST (Corrigido: Adicionado usu_situacao)
+//  GET LIST
 // ----------------------------------------------------
 export const listUsers = async (req, res, next) => {
   try {
-    // 1. Recebe parâmetros novos: orderBy e orderDirection
     const { 
         search, 
         page = 1, 
         limit = 10, 
         status, 
-        orderBy = 'usu_id', // Padrão: ID
-        orderDirection = 'DESC' // Padrão: Decrescente
+        orderBy = 'usu_id', 
+        orderDirection = 'DESC'
     } = req.query;
 
     const offset = (page - 1) * limit;
 
-    // 2. LISTA DE COLUNAS PERMITIDAS (Segurança contra SQL Injection)
-    // Só aceita ordenar por estes campos. Se tentarem outro, força usu_id.
     const sortableColumns = ['usu_id', 'usu_nome', 'usu_email', 'usu_situacao', 'usu_acesso'];
     const safeOrderBy = sortableColumns.includes(orderBy) ? orderBy : 'usu_id';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -89,7 +86,7 @@ export const listUsers = async (req, res, next) => {
     const values = [];
     let paramIndex = 1;
 
-    // Filtros (Texto e Status)
+    // Filtros
     if (search) {
       conditions.push(`(usu_nome ILIKE $${paramIndex} OR usu_email ILIKE $${paramIndex})`);
       values.push(`%${search}%`);
@@ -109,14 +106,10 @@ export const listUsers = async (req, res, next) => {
       countQuery += whereClause;
     }
 
-    // 3. APLICA A ORDENAÇÃO DINÂMICA
-    // Nota: Como validamos safeOrderBy e safeOrderDirection, podemos interpolar na string
     queryText += ` ORDER BY ${safeOrderBy} ${safeOrderDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    
     values.push(limit, offset);
 
     const result = await pool.query(queryText, values);
-    
     const countValues = values.slice(0, paramIndex - 1); 
     const countResult = await pool.query(countQuery, countValues);
     
@@ -141,7 +134,11 @@ export const getUserById = async (req, res, next) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ status: 'error', message: 'Usuário não encontrado' });
     }
-    return res.json({ status: 'success', data: result.rows[0] });
+    // Remove a senha do retorno por segurança
+    const user = result.rows[0];
+    delete user.usu_senha;
+
+    return res.json({ status: 'success', data: user });
   } catch (error) { next(error); }
 };
 
@@ -157,7 +154,7 @@ export const createUser = async (req, res, next) => {
 
     // Validações Básicas
     if (!usu_nome || !usu_cpf || !usu_email || !usu_senha) {
-      return res.status(400).json({ status: 'error', message: 'Campos obrigatórios não informados' });
+      return res.status(400).json({ status: 'error', message: 'Campos obrigatórios (Nome, CPF, Email, Senha) não informados.' });
     }
 
     if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
@@ -177,7 +174,7 @@ export const createUser = async (req, res, next) => {
         }
     }
 
-    // CRIPTOGRAFAR SENHA ANTES DE SALVAR
+    // CRIPTOGRAFAR SENHA
     const passwordHash = await hashPassword(usu_senha);
 
     const query = `
@@ -185,7 +182,7 @@ export const createUser = async (req, res, next) => {
         usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
         usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      RETURNING usu_id;
+      RETURNING *;
     `;
 
     const values = [
@@ -196,6 +193,9 @@ export const createUser = async (req, res, next) => {
     ];
 
     const result = await pool.query(query, values);
+    
+    // Remove a senha do retorno
+    delete result.rows[0].usu_senha;
 
     return res.status(201).json({ status: 'success', message: 'Usuário criado com sucesso', data: result.rows[0] });
 
@@ -216,20 +216,24 @@ export const createUser = async (req, res, next) => {
 
 
 // ----------------------------------------------------
-//  UPDATE USER
+//  UPDATE USER (PATCH Dinâmico e Seguro)
 // ----------------------------------------------------
 export const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const {
-      usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
-      usu_email, usu_observ, usu_acesso, usu_senha, usu_situacao
-    } = req.body;
+    const updates = req.body;
 
-    // 1. Validação CPF
-    if (usu_cpf) {
-        if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
-        const cpfLimpo = usu_cpf.replace(/\D/g, '');
+    // 1. Verifica se enviou algum dado
+    if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
+    }
+
+    // --- VALIDAÇÕES CONDICIONAIS ---
+
+    // Validação CPF
+    if (updates.usu_cpf) {
+        if (!isValidCPF(updates.usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
+        const cpfLimpo = updates.usu_cpf.replace(/\D/g, '');
         const cpfCheck = await pool.query(
             `SELECT usu_id FROM usuarios WHERE REGEXP_REPLACE(usu_cpf, '\\D','','g') = $1 AND usu_id != $2`,
             [cpfLimpo, id]
@@ -237,50 +241,77 @@ export const updateUser = async (req, res, next) => {
         if (cpfCheck.rowCount > 0) return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
     }
 
-    // 2. Validação Email
-    if (usu_email && !isValidEmail(usu_email)) {
+    // Validação Email
+    if (updates.usu_email && !isValidEmail(updates.usu_email)) {
         return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
     }
 
-    // 3. Validação e Hash da Senha
-    let passwordHash = null; 
-
-    if (usu_senha) {
-        if (!isValidPassword(usu_senha)) {
+    // Validação Senha (Se vier senha, hasheia ela)
+    if (updates.usu_senha) {
+        if (!isValidPassword(updates.usu_senha)) {
             return res.status(400).json({ 
                 status: 'error', 
                 message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
             });
         }
-        passwordHash = await hashPassword(usu_senha);
+        // Substitui a senha em texto plano pelo hash
+        updates.usu_senha = await hashPassword(updates.usu_senha);
     }
 
-    if (usu_data_nasc) {
-        const dateError = getAgeError(usu_data_nasc);
+    // Validação Idade
+    if (updates.usu_data_nasc) {
+        const dateError = getAgeError(updates.usu_data_nasc);
         if (dateError) {
              return res.status(400).json({ status: 'error', message: dateError });
         }
     }
 
-    // COALESCE: Se a senha for enviada como null/undefined no código, mantém a do banco
+    // --- MONTAGEM DINÂMICA DA QUERY ---
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    const allowedFields = [
+        'usu_nome', 'usu_cpf', 'usu_data_nasc', 'usu_sexo', 
+        'usu_telefone', 'usu_email', 'usu_observ', 
+        'usu_acesso', 'usu_senha', 'usu_situacao'
+    ];
+
+    for (const key in updates) {
+        if (allowedFields.includes(key)) {
+            fields.push(`${key} = $${index}`);
+            values.push(updates[key]);
+            index++;
+        }
+    }
+
+    if (fields.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo válido para atualização.' });
+    }
+
+    values.push(id);
+
     const query = `
       UPDATE usuarios
-      SET usu_nome = $1, usu_cpf = $2, usu_data_nasc = $3, usu_sexo = $4,
-          usu_telefone = $5, usu_email = $6, usu_observ = $7, usu_acesso = $8,
-          usu_senha = COALESCE($9, usu_senha), 
-          usu_situacao = COALESCE($10, usu_situacao)  -- <--- MUDANÇA AQUI
-      WHERE usu_id = $11;
+      SET ${fields.join(', ')}
+      WHERE usu_id = $${index}
+      RETURNING *;
     `;
 
-    await pool.query(query, [
-      usu_nome, usu_cpf, usu_data_nasc, usu_sexo, usu_telefone,
-      usu_email, usu_observ, usu_acesso, 
-      passwordHash, // Manda o Hash (se existir) ou null
-      usu_situacao ?? null, // <--- GARANTA QUE SEJA NULL SE VIER UNDEFINED
-      id
-    ]);
+    const result = await pool.query(query, values);
 
-    return res.json({ status: 'success', message: 'Usuário atualizado com sucesso' });
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Usuário não encontrado" });
+    }
+
+    // Remove a senha do retorno
+    delete result.rows[0].usu_senha;
+
+    return res.json({ 
+        status: 'success', 
+        message: 'Usuário atualizado com sucesso',
+        data: result.rows[0]
+    });
 
   } catch (error) {
      if (error.code == '23505') {
@@ -292,13 +323,17 @@ export const updateUser = async (req, res, next) => {
 };
 
 // ----------------------------------------------------
-//  UPDATE USER STATUS (PATCH)
+//  UPDATE USER STATUS (Atalho Útil)
 // ----------------------------------------------------
-export const updateUserStatus = async (req, res) => {
-    const { id } = req.params;
-    const { usu_situacao } = req.body; // Recebe true ou false
-
+export const updateUserStatus = async (req, res, next) => {
     try {
+        const { id } = req.params;
+        const { usu_situacao } = req.body; 
+
+        if (usu_situacao === undefined) {
+             return res.status(400).json({ status: 'error', message: 'O campo usu_situacao é obrigatório.' });
+        }
+
         const query = `
             UPDATE usuarios 
             SET usu_situacao = $1 
@@ -319,8 +354,7 @@ export const updateUserStatus = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Erro ao atualizar status:", error);
-        return res.status(500).json({ message: 'Erro interno ao atualizar status.' });
+        next(error);
     }
 };
 
@@ -330,9 +364,23 @@ export const updateUserStatus = async (req, res) => {
 export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
+    
+    // Verifica se existe
+    const check = await pool.query('SELECT usu_id FROM usuarios WHERE usu_id = $1', [id]);
+    if (check.rowCount === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
+
     await pool.query('DELETE FROM usuarios WHERE usu_id = $1;', [id]);
     return res.json({ status: 'success', message: 'Usuário removido com sucesso' });
-  } catch (error) { next(error); }
+  } catch (error) { 
+      // Proteção contra erro de Chave Estrangeira (se o usuário tem carros ou agendamentos)
+      if (error.code === '23503') {
+          return res.status(409).json({ 
+              status: 'error', 
+              message: 'Não é possível excluir este usuário pois ele possui veículos ou agendamentos vinculados. Considere inativá-lo.' 
+          });
+      }
+      next(error); 
+  }
 };
 
 // ----------------------------------------------------
@@ -354,7 +402,7 @@ export const getUserVehicles = async (req, res, next) => {
         `;
         
         const result = await pool.query(query, [id]);
-        return res.json(result.rows);
+        return res.json({ status: 'success', data: result.rows });
     } catch (error) {
         next(error);
     }
