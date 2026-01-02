@@ -74,4 +74,20 @@ Resposta esperada:
   "status": "ok",
   "message": "API is running"
 }
+``` 
 
+## Gerando a chave secreta para o token JWT:
+
+no terminal do vscode:
+
+```
+  node
+``` 
+
+logo em seguida, rodar esse comando:
+
+```
+  require('crypto').randomBytes(64).toString('hex')
+```
+
+após isso, copiar a key gerada e colar no .env, na JWT_SECRET, sem aspas

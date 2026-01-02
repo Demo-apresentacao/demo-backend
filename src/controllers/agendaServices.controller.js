@@ -6,6 +6,8 @@ import pool from '../config/db.js';
  */
 export const listAgendaServices = async (req, res, next) => {
   try {
+    // Dica: Em um cenário real, você provavelmente faria JOINs aqui
+    // para trazer o nome do serviço e o nome do status, não só os IDs.
     const query = `
       SELECT
         agend_serv_id,
@@ -36,6 +38,14 @@ export const createAgendaService = async (req, res, next) => {
   try {
     const { agend_id, serv_id, agend_serv_situ_id } = req.body;
 
+    // Validação básica
+    if (!agend_id || !serv_id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Os campos agend_id e serv_id são obrigatórios.'
+      });
+    }
+
     const query = `
       INSERT INTO agenda_servicos (
         agend_id,
@@ -43,10 +53,11 @@ export const createAgendaService = async (req, res, next) => {
         agend_serv_situ_id
       )
       VALUES ($1, $2, $3)
-      RETURNING agend_serv_id;
+      RETURNING *;
     `;
 
-    const values = [agend_id, serv_id, agend_serv_situ_id];
+    // Se o status não for enviado, assume NULL (ou você pode definir um default aqui)
+    const values = [agend_id, serv_id, agend_serv_situ_id || null];
 
     const result = await pool.query(query, values);
 
@@ -61,29 +72,54 @@ export const createAgendaService = async (req, res, next) => {
 };
 
 /**
- * Atualiza um serviço agendado
+ * Atualiza um serviço agendado (PATCH Dinâmico)
  * PATCH /agenda-services/:agend_serv_id
  */
 export const updateAgendaService = async (req, res, next) => {
   try {
     const { agend_serv_id } = req.params;
-    const { agend_id, serv_id, agend_serv_situ_id } = req.body;
+    const updates = req.body;
+
+    // 1. Verifica se enviou algum dado
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Nenhum campo fornecido para atualização.'
+      });
+    }
+
+    // 2. Montagem Dinâmica da Query
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    // Lista de campos permitidos para alteração
+    const allowedFields = ['agend_id', 'serv_id', 'agend_serv_situ_id'];
+
+    for (const key in updates) {
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = $${index}`);
+        values.push(updates[key]);
+        index++;
+      }
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Nenhum campo válido para atualização.'
+      });
+    }
+
+    // Adiciona o ID no final
+    values.push(agend_serv_id);
 
     const query = `
       UPDATE agenda_servicos
-         SET agend_id = $1,
-             serv_id = $2,
-             agend_serv_situ_id = $3
-       WHERE agend_serv_id = $4
-       RETURNING *;
+      SET ${fields.join(', ')}
+      WHERE agend_serv_id = $${index}
+      RETURNING *;
     `;
-
-    const values = [
-      agend_id,
-      serv_id,
-      agend_serv_situ_id,
-      agend_serv_id
-    ];
 
     const result = await pool.query(query, values);
 
@@ -114,8 +150,8 @@ export const deleteAgendaService = async (req, res, next) => {
 
     const query = `
       DELETE FROM agenda_servicos
-       WHERE agend_serv_id = $1
-       RETURNING agend_serv_id;
+      WHERE agend_serv_id = $1
+      RETURNING agend_serv_id;
     `;
 
     const result = await pool.query(query, [agend_serv_id]);

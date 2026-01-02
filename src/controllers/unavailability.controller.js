@@ -12,7 +12,7 @@ export const listUnavailability = async (req, res, next) => {
         indisp_data,
         indisp_situacao
       FROM indisponibilidade
-      ORDER BY indisp_id;
+      ORDER BY indisp_data ASC; -- Ordenar por data faz mais sentido para agenda
     `;
 
     const result = await pool.query(query);
@@ -33,7 +33,11 @@ export const listUnavailability = async (req, res, next) => {
  */
 export const createUnavailability = async (req, res, next) => {
   try {
-    const { indisp_data, indisp_situacao } = req.body;
+    const { indisp_data, indisp_situacao = true } = req.body;
+
+    if (!indisp_data) {
+        return res.status(400).json({ status: 'error', message: 'A data da indisponibilidade é obrigatória.' });
+    }
 
     const query = `
       INSERT INTO indisponibilidade (
@@ -41,7 +45,7 @@ export const createUnavailability = async (req, res, next) => {
         indisp_situacao
       )
       VALUES ($1, $2)
-      RETURNING indisp_id;
+      RETURNING *;
     `;
 
     const values = [indisp_data, indisp_situacao];
@@ -51,7 +55,7 @@ export const createUnavailability = async (req, res, next) => {
     return res.status(201).json({
       status: 'success',
       message: 'Indisponibilidade cadastrada com sucesso.',
-      id: result.rows[0].indisp_id
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
@@ -59,26 +63,57 @@ export const createUnavailability = async (req, res, next) => {
 };
 
 /**
- * Edita a data de uma indisponibilidade
+ * Edita uma indisponibilidade (PATCH Dinâmico)
  * PATCH /unavailability/:indisp_id
  */
 export const updateUnavailability = async (req, res, next) => {
   try {
     const { indisp_id } = req.params;
-    const { indisp_data } = req.body;
+    const updates = req.body;
+
+    // 1. Verifica se enviou algum dado
+    if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
+    }
+
+    // 2. Montagem Dinâmica da Query
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    const allowedFields = ['indisp_data', 'indisp_situacao'];
+
+    for (const key in updates) {
+        if (allowedFields.includes(key)) {
+            fields.push(`${key} = $${index}`);
+            values.push(updates[key]);
+            index++;
+        }
+    }
+
+    if (fields.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum campo válido para atualização.' });
+    }
+
+    values.push(indisp_id);
 
     const query = `
       UPDATE indisponibilidade
-         SET indisp_data = $1
-       WHERE indisp_id = $2;
+      SET ${fields.join(', ')}
+      WHERE indisp_id = $${index}
+      RETURNING *;
     `;
 
-    const result = await pool.query(query, [indisp_data, indisp_id]);
+    const result = await pool.query(query, values);
+
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Indisponibilidade não encontrada" });
+    }
 
     return res.json({
       status: 'success',
-      message: `Indisponibilidade ${indisp_id} atualizada com sucesso.`,
-      rowsAffected: result.rowCount
+      message: `Indisponibilidade atualizada com sucesso.`,
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
@@ -86,7 +121,7 @@ export const updateUnavailability = async (req, res, next) => {
 };
 
 /**
- * Ativa ou desativa uma indisponibilidade
+ * Ativa ou desativa uma indisponibilidade (Atalho)
  * PATCH /unavailability/status/:indisp_id
  */
 export const toggleUnavailabilityStatus = async (req, res, next) => {
@@ -94,20 +129,27 @@ export const toggleUnavailabilityStatus = async (req, res, next) => {
     const { indisp_id } = req.params;
     const { indisp_situacao } = req.body;
 
+    if (indisp_situacao === undefined) {
+        return res.status(400).json({ status: 'error', message: "O campo indisp_situacao é obrigatório." });
+    }
+
     const query = `
       UPDATE indisponibilidade
-         SET indisp_situacao = $1
-       WHERE indisp_id = $2;
+      SET indisp_situacao = $1
+      WHERE indisp_id = $2
+      RETURNING *;
     `;
 
     const result = await pool.query(query, [indisp_situacao, indisp_id]);
 
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Indisponibilidade não encontrada" });
+    }
+
     return res.json({
       status: 'success',
-      message: `Indisponibilidade ${
-        indisp_situacao ? 'ativada' : 'desativada'
-      } com sucesso.`,
-      rowsAffected: result.rowCount
+      message: `Indisponibilidade ${indisp_situacao ? 'ativada' : 'desativada'} com sucesso.`,
+      data: result.rows[0]
     });
   } catch (error) {
     next(error);
@@ -124,15 +166,19 @@ export const deleteUnavailability = async (req, res, next) => {
 
     const query = `
       DELETE FROM indisponibilidade
-      WHERE indisp_id = $1;
+      WHERE indisp_id = $1
+      RETURNING indisp_id;
     `;
 
     const result = await pool.query(query, [indisp_id]);
 
+    if (result.rowCount === 0) {
+        return res.status(404).json({ status: 'error', message: "Indisponibilidade não encontrada" });
+    }
+
     return res.json({
       status: 'success',
-      message: `Indisponibilidade ${indisp_id} removida com sucesso.`,
-      rowsAffected: result.rowCount
+      message: `Indisponibilidade removida com sucesso.`
     });
   } catch (error) {
     next(error);

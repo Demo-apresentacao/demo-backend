@@ -1,7 +1,7 @@
 import pool from '../config/db.js';
 
 // GET /vehicles
-// Lista todos os veículos
+// Lista todos os veículos com paginação e filtros
 export const listVehicles = async (req, res, next) => {
   try {
     const search = req.query.search || '';
@@ -14,18 +14,15 @@ export const listVehicles = async (req, res, next) => {
         status = 'all';
     }
 
-    // Novos parâmetros de Ordenação
+    // Ordenação
     const { orderBy = 'veic_id', orderDirection = 'DESC' } = req.query;
 
-    // --- MAPA DE ORDENAÇÃO ---
-    // Traduz o campo do frontend para o campo do banco com alias correto
     const sortMap = {
         'veic_id': 'v.veic_id',
         'modelo': 'mo.mod_nome',
         'marca': 'm.mar_nome',
         'veic_placa': 'v.veic_placa',
         'veic_situacao': 'v.veic_situacao'
-        // 'proprietarios' é complexo de ordenar pois é um agregado, melhor não incluir por enquanto
     };
 
     const safeOrderBy = sortMap[orderBy] || 'v.veic_id';
@@ -104,7 +101,7 @@ export const listVehicles = async (req, res, next) => {
     const countValues = values.slice(0, paramIndex - 1);
     const countResult = await pool.query(countQuery, countValues);
 
-    const totalItems = Number(countResult.rows[0].total);
+    const totalItems = Number(countResult.rows[0]?.total || 0);
     const totalPages = Math.ceil(totalItems / limit);
 
     return res.status(200).json({
@@ -114,7 +111,6 @@ export const listVehicles = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error("❌ ERRO GRAVE NO CONTROLLER:", error);
     next(error);
   }
 };
@@ -148,28 +144,16 @@ export const getVehicleById = async (req, res, next) => {
         LEFT JOIN veiculo_usuario AS vu ON v.veic_id = vu.veic_id
         LEFT JOIN usuarios        AS u ON vu.usu_id  = u.usu_id
             WHERE v.veic_id = $1
-         GROUP BY v.veic_id,
-                  c.cat_id,
-                  mo.mod_id,
-                  mo.mod_nome,
-                  m.mar_id,
-                  m.mar_nome,
-                  c.cat_nome;
-    `;
+         GROUP BY v.veic_id, c.cat_id, mo.mod_id, mo.mod_nome, m.mar_id, m.mar_nome, c.cat_nome;
+        `;
 
         const result = await pool.query(query, [id]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({
-                status: 'error',
-                message: 'Veículo não encontrado'
-            });
+            return res.status(404).json({ status: 'error', message: 'Veículo não encontrado' });
         }
 
-        return res.json({
-            status: 'success',
-            data: result.rows[0]
-        });
+        return res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
         next(error);
     }
@@ -180,196 +164,144 @@ export const getVehicleById = async (req, res, next) => {
 export const createVehicle = async (req, res, next) => {
     try {
         const {
-            mod_id,
-            veic_placa,
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ,
-            veic_situacao
+            mod_id, veic_placa, veic_ano, veic_cor, 
+            veic_combustivel, veic_observ, veic_situacao
         } = req.body;
 
+        if (!mod_id || !veic_placa || !veic_ano) {
+             return res.status(400).json({ status: 'error', message: 'Modelo, Placa e Ano são obrigatórios.' });
+        }
 
         const currentYear = new Date().getFullYear();
         if (parseInt(veic_ano) > currentYear + 1) {
-            return res.status(400).json({
-                status: 'error',
-                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
-            });
+            return res.status(400).json({ status: 'error', message: `O ano do veículo não pode ser maior que ${currentYear + 1}` });
         }
 
-        const checkQuery = `
-        SELECT veic_id
-          FROM veiculos
-         WHERE veic_placa = $1
-         LIMIT 1;
-    `;
-
+        // Verifica duplicidade de placa
+        const checkQuery = `SELECT veic_id FROM veiculos WHERE veic_placa = $1 LIMIT 1;`;
         const checkResult = await pool.query(checkQuery, [veic_placa.toUpperCase()]);
 
         if (checkResult.rows.length > 0) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Placa já cadastrada'
-            });
+            return res.status(409).json({ status: 'error', message: 'Placa já cadastrada no sistema.' });
         }
 
         const insertQuery = `
-        INSERT INTO veiculos ( mod_id,
-                               veic_placa,
-                               veic_ano,
-                               veic_cor,
-                               veic_combustivel,
-                               veic_observ,
-                               veic_situacao
-                              )
-                       VALUES ($1, $2, $3, $4, $5, $6, $7)
-                       RETURNING veic_id;
-    `;
+        INSERT INTO veiculos (
+            mod_id, veic_placa, veic_ano, veic_cor, veic_combustivel, veic_observ, veic_situacao
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *;
+        `;
 
         const values = [
-            mod_id,
-            veic_placa.toUpperCase(),
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ,
-            veic_situacao
+            mod_id, veic_placa.toUpperCase(), veic_ano, veic_cor, 
+            veic_combustivel, veic_observ, veic_situacao ?? true
         ];
 
         const result = await pool.query(insertQuery, values);
 
-        return res.status(201).json({
-            status: 'success',
-            data: { veic_id: result.rows[0].veic_id }
-        });
+        return res.status(201).json({ status: 'success', message: 'Veículo cadastrado com sucesso', data: result.rows[0] });
     } catch (error) {
         next(error);
     }
 };
 
 /**
+ * Função genérica para atualização dinâmica (PATCH)
+ * usada tanto pela rota do Usuário quanto do Admin
+ */
+const updateVehicleDynamic = async (veic_id, updates, allowedFields) => {
+    // 1. Validações Específicas antes de montar a query
+    if (updates.veic_ano) {
+        const currentYear = new Date().getFullYear();
+        if (parseInt(updates.veic_ano) > currentYear + 1) {
+             throw { status: 400, message: `O ano do veículo não pode ser maior que ${currentYear + 1}` };
+        }
+    }
+
+    if (updates.veic_placa) {
+        updates.veic_placa = updates.veic_placa.toUpperCase();
+        // Verifica se a nova placa já existe em OUTRO veículo
+        const check = await pool.query(
+            `SELECT veic_id FROM veiculos WHERE veic_placa = $1 AND veic_id != $2`, 
+            [updates.veic_placa, veic_id]
+        );
+        if (check.rowCount > 0) {
+            throw { status: 409, message: 'Esta placa já pertence a outro veículo.' };
+        }
+    }
+
+    // 2. Montagem Dinâmica
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    for (const key in updates) {
+        if (allowedFields.includes(key)) {
+            fields.push(`${key} = $${index}`);
+            values.push(updates[key]);
+            index++;
+        }
+    }
+
+    if (fields.length === 0) {
+        throw { status: 400, message: 'Nenhum campo válido para atualização.' };
+    }
+
+    values.push(veic_id);
+
+    const query = `
+        UPDATE veiculos
+        SET ${fields.join(', ')}
+        WHERE veic_id = $${index}
+        RETURNING *;
+    `;
+
+    const result = await pool.query(query, values);
+    
+    if (result.rowCount === 0) {
+        throw { status: 404, message: 'Veículo não encontrado.' };
+    }
+
+    return result.rows[0];
+};
+
 // PATCH /vehicles/user/:veic_id
-// Usuário edita apenas dados básicos do veículo
-*/
+// Edição simplificada (sem alterar situação)
 export const updateVehicleByUser = async (req, res, next) => {
     try {
         const { veic_id } = req.params;
-        const {
-            mod_id,
-            veic_placa,
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ
-        } = req.body;
+        const updates = req.body;
+        
+        // Campos permitidos para o usuário comum
+        const allowedFields = ['mod_id', 'veic_placa', 'veic_ano', 'veic_cor', 'veic_combustivel', 'veic_observ'];
 
-
-        const currentYear = new Date().getFullYear();
-        if (parseInt(veic_ano) > currentYear + 1) {
-            return res.status(400).json({
-                status: 'error',
-                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
-            });
-        }
-
-        const query = `
-      UPDATE veiculos
-      SET
-        mod_id = $1,
-        veic_placa = UPPER($2),
-        veic_ano = $3,
-        veic_cor = $4,
-        veic_combustivel = $5,
-        veic_observ = $6
-      WHERE veic_id = $7
-      RETURNING veic_id;
-    `;
-
-        const values = [
-            mod_id,
-            veic_placa,
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ,
-            veic_id
-        ];
-
-        const { rowCount } = await pool.query(query, values);
-
-        if (!rowCount) {
-            return res.status(404).json({ status: 'error', message: 'Veículo não encontrado' });
-        }
-
-        res.json({ status: 'success', message: 'Veículo atualizado pelo usuário' });
+        const updatedVehicle = await updateVehicleDynamic(veic_id, updates, allowedFields);
+        
+        return res.json({ status: 'success', message: 'Veículo atualizado.', data: updatedVehicle });
     } catch (error) {
+        if (error.status) return res.status(error.status).json({ status: 'error', message: error.message });
         next(error);
     }
 };
 
-/**
 // PATCH /vehicles/:veic_id
-// Admin edita todos os dados do veículo
-*/
+// Edição completa (inclui situação)
 export const updateVehicleByAdmin = async (req, res, next) => {
     try {
         const { veic_id } = req.params;
-        const {
-            mod_id,
-            veic_placa,
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ,
-            veic_situacao
-        } = req.body;
+        const updates = req.body;
+        
+        // Admin pode alterar tudo
+        const allowedFields = ['mod_id', 'veic_placa', 'veic_ano', 'veic_cor', 'veic_combustivel', 'veic_observ', 'veic_situacao'];
 
-        const currentYear = new Date().getFullYear();
-        if (parseInt(veic_ano) > currentYear + 1) {
-            return res.status(400).json({
-                status: 'error',
-                message: `O ano do veículo não pode ser maior que ${currentYear + 1}`
-            });
-        }
+        const updatedVehicle = await updateVehicleDynamic(veic_id, updates, allowedFields);
 
-        const query = `
-      UPDATE veiculos
-      SET
-        mod_id = $1,
-        veic_placa = UPPER($2),
-        veic_ano = $3,
-        veic_cor = $4,
-        veic_combustivel = $5,
-        veic_observ = $6,
-        veic_situacao = $7
-      WHERE veic_id = $8
-      RETURNING veic_id;
-    `;
-
-        const values = [
-            mod_id,
-            veic_placa,
-            veic_ano,
-            veic_cor,
-            veic_combustivel,
-            veic_observ,
-            veic_situacao === true, // garante boolean
-            veic_id
-        ];
-
-        const { rowCount } = await pool.query(query, values);
-
-        if (!rowCount) {
-            return res.status(404).json({ status: 'error', message: 'Veículo não encontrado' });
-        }
-
-        res.json({ status: 'success', message: 'Veículo atualizado pelo admin' });
+        return res.json({ status: 'success', message: 'Veículo atualizado (Admin).', data: updatedVehicle });
     } catch (error) {
+        if (error.status) return res.status(error.status).json({ status: 'error', message: error.message });
         next(error);
     }
 };
-
 
 // PATCH /vehicles/:veic_id/status
 // Ativa ou desativa um veículo 
@@ -378,23 +310,32 @@ export const toggleVehicleStatus = async (req, res, next) => {
         const { veic_id } = req.params;
         const { veic_situacao } = req.body;
 
-        const query = `
-      UPDATE veiculos
-      SET veic_situacao = $1
-      WHERE veic_id = $2;
-    `;
+        if (veic_situacao === undefined) {
+             return res.status(400).json({ status: 'error', message: 'O campo veic_situacao é obrigatório.' });
+        }
 
-        await pool.query(query, [veic_situacao, veic_id]);
+        const query = `
+            UPDATE veiculos
+            SET veic_situacao = $1
+            WHERE veic_id = $2
+            RETURNING *;
+        `;
+
+        const result = await pool.query(query, [veic_situacao, veic_id]);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ status: 'error', message: 'Veículo não encontrado.' });
+        }
+
         return res.json({
             status: 'success',
-            message: `Veículo ${veic_id} ${veic_situacao ? 'ativado' : 'desativado'
-                } com sucesso`
+            message: `Veículo ${veic_situacao ? 'ativado' : 'desativado'} com sucesso`,
+            data: result.rows[0]
         });
     } catch (error) {
         next(error);
     }
 };
-
 
 // DELETE /vehicles/:id
 // Remove um veículo
@@ -403,41 +344,32 @@ export const deleteVehicle = async (req, res, next) => {
         const { id } = req.params;
 
         const query = `
-      DELETE FROM veiculos
-      WHERE veic_id = $1;
-    `;
+            DELETE FROM veiculos
+            WHERE veic_id = $1
+            RETURNING veic_id;
+        `;
 
-        await pool.query(query, [id]);
+        const result = await pool.query(query, [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ status: 'error', message: 'Veículo não encontrado.' });
+        }
 
         return res.json({
             status: 'success',
-            message: `Veículo ${id} removido com sucesso`
+            message: 'Veículo removido com sucesso'
         });
     } catch (error) {
+        // Erro de Chave Estrangeira (Se tiver histórico ou agendamentos)
+        if (error.code === '23503') {
+             return res.status(409).json({ 
+                 status: 'error', 
+                 message: 'Não é possível excluir este veículo pois ele possui histórico de proprietários ou agendamentos.' 
+             });
+        }
         next(error);
     }
 };
 
-// PATCH /vehicles/:id/status
-export const updateVehicleStatus = async (req, res, next) => {
-    try {
-        const { veic_situacao } = req.body;
-        const { id } = req.params;
-
-        const query = `
-      UPDATE veiculos
-      SET veic_situacao = $1
-      WHERE veic_id = $2
-      RETURNING veic_id, veic_situacao;
-    `;
-
-        const result = await pool.query(query, [veic_situacao, id]);
-
-        return res.json({
-            status: 'success',
-            data: result.rows[0]
-        });
-    } catch (error) {
-        next(error);
-    }
-};
+// NOTA: Removi a função 'updateVehicleStatus' pois ela era duplicada da 'toggleVehicleStatus'.
+// Use apenas toggleVehicleStatus nas rotas.

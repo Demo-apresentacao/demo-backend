@@ -9,17 +9,15 @@ export const getDashboardStats = async (req, res, next) => {
         const hoje = now.toISOString().split('T')[0];
         const mesAtual = now.toISOString().slice(0, 7);
         
-        // Mantemos a hora apenas para referência se precisar, mas a lógica mudou
-        const hora = String(now.getHours()).padStart(2, '0');
-        const min = String(now.getMinutes()).padStart(2, '0');
-        const horaAtual = `${hora}:${min}`;
-
         try {
-            // --- BLOCO 1: EM ANDAMENTO (NOVA LÓGICA: FILA DE PRIORIDADE) ---
-            // Pega o PRIMEIRO agendamento PENDENTE do dia.
-            // Se for 14h e tiver um das 08h pendente, ele pega o das 08h.
+            // --- BLOCO 1: EM ANDAMENTO (CORRIGIDO) ---
+            // Prioridade:
+            // 1º - Mostra quem está SENDO ATENDIDO AGORA (Status 2 - Em Execução)
+            // 2º - Se ninguém estiver sendo atendido, mostra o PRÓXIMO PENDENTE (Status 1 - Agendado)
+            // Ordena por prioridade de status (Em execução vem antes) e depois por horário.
             const andamentoRes = await client.query(`
-                SELECT a.agend_id, a.agend_horario, v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone,
+                SELECT a.agend_id, a.agend_horario, a.agend_situacao, 
+                       v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone,
                        STRING_AGG(s.serv_nome, ' + ') as lista_servicos
                 FROM agendamentos a
                 JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
@@ -29,9 +27,11 @@ export const getDashboardStats = async (req, res, next) => {
                 LEFT JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
                 LEFT JOIN servicos s ON ags.serv_id = s.serv_id
                 WHERE a.agend_data = $1 
-                  AND a.agend_situacao = 1 -- APENAS PENDENTES
-                GROUP BY a.agend_id, a.agend_horario, v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone
-                ORDER BY a.agend_horario ASC -- O MAIS ANTIGO PRIMEIRO
+                  AND a.agend_situacao IN (1, 2) -- Pega Pendentes (1) e Em Execução (2)
+                GROUP BY a.agend_id, a.agend_horario, a.agend_situacao, v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone
+                ORDER BY 
+                    CASE WHEN a.agend_situacao = 2 THEN 0 ELSE 1 END, -- Prioriza Status 2 (Em Execução)
+                    a.agend_horario ASC -- Desempata pelo horário (mais antigo primeiro)
                 LIMIT 1
             `, [hoje]);
 
@@ -40,26 +40,32 @@ export const getDashboardStats = async (req, res, next) => {
 
             // --- BLOCO 2: CONSULTAS PARALELAS ---
             const [clientesRes, veiculosHojeRes, faturamentoRes, concluidosRes, proximasRes, graficoRes] = await Promise.all([
-                // Cards Stats
+                // 1. Total Clientes
                 client.query('SELECT COUNT(*) FROM usuarios'),
+                
+                // 2. Veículos Hoje (Exclui cancelados status 0)
                 client.query('SELECT COUNT(*) FROM agendamentos WHERE agend_data = $1 AND agend_situacao != 0', [hoje]),
+                
+                // 3. Faturamento Mês (Considera apenas CONCLUÍDOS status 3)
+                // Usando COALESCE para retornar 0 se for null
                 client.query(`
-                    SELECT SUM(s.serv_preco) as total 
+                    SELECT COALESCE(SUM(s.serv_preco), 0) as total 
                     FROM agenda_servicos ags
                     JOIN servicos s ON ags.serv_id = s.serv_id
                     JOIN agendamentos a ON ags.agend_id = a.agend_id
                     WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1 AND a.agend_situacao = 3
                 `, [mesAtual]),
+
+                // 4. Concluídos Mês
                 client.query(`
                     SELECT COUNT(*) FROM agendamentos 
                     WHERE TO_CHAR(agend_data, 'YYYY-MM') = $1 AND agend_situacao = 3
                 `, [mesAtual]),
 
-                // PRÓXIMAS ENTRADAS (NOVA LÓGICA: RESTANTE DA FILA)
-                // Mostra tudo que é pendente e não é o principal.
-                // Removemos o filtro de hora (>= $2) para não esconder atrasados.
+                // 5. PRÓXIMAS ENTRADAS
+                // Pega o restante da fila (Status 1 ou 2) que NÃO é o que já mostramos acima
                 client.query(`
-                    SELECT a.agend_horario, v.veic_placa, m.mod_nome, u.usu_nome,
+                    SELECT a.agend_horario, a.agend_situacao, v.veic_placa, m.mod_nome, u.usu_nome,
                        (SELECT s.serv_nome FROM servicos s 
                         JOIN agenda_servicos ags ON s.serv_id = ags.serv_id 
                         WHERE ags.agend_id = a.agend_id LIMIT 1) as servico_principal
@@ -69,13 +75,13 @@ export const getDashboardStats = async (req, res, next) => {
                     JOIN modelos m ON v.mod_id = m.mod_id
                     JOIN usuarios u ON vu.usu_id = u.usu_id
                     WHERE a.agend_data = $1 
-                      AND a.agend_situacao = 1 -- APENAS PENDENTES
-                      AND a.agend_id != $2     -- IGNORA O QUE JÁ ESTÁ NO BOX PRINCIPAL
+                      AND a.agend_situacao IN (1, 2) -- Pendentes ou Em espera
+                      AND a.agend_id != $2           -- Ignora o ID que já está no destaque
                     ORDER BY a.agend_horario ASC
                     LIMIT 4
                 `, [hoje, idEmAndamento]),
 
-                // Gráfico
+                // 6. Gráfico (Top 5 Serviços)
                 client.query(`
                     SELECT s.serv_nome, COUNT(*) as total
                     FROM agenda_servicos ags
@@ -91,10 +97,10 @@ export const getDashboardStats = async (req, res, next) => {
             return res.json({
                 status: 'success',
                 cards: {
-                    clientes_totais: clientesRes.rows[0].count,
-                    veiculos_hoje: veiculosHojeRes.rows[0].count,
-                    faturamento_mes: faturamentoRes.rows[0].total || 0,
-                    concluidos_mes: concluidosRes.rows[0].count
+                    clientes_totais: parseInt(clientesRes.rows[0].count),
+                    veiculos_hoje: parseInt(veiculosHojeRes.rows[0].count),
+                    faturamento_mes: parseFloat(faturamentoRes.rows[0].total), // Garante número
+                    concluidos_mes: parseInt(concluidosRes.rows[0].count)
                 },
                 em_andamento: agendamentoAtual,
                 proximas_entradas: proximasRes.rows,

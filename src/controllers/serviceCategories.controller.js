@@ -6,7 +6,6 @@ import pool from '../config/db.js';
  */
 export const listServiceCategories = async (req, res, next) => {
     try {
-        // 👇 AQUI: Adicionei cat_serv_situacao na query
         const query = `
             SELECT cat_serv_id, cat_serv_nome, cat_serv_situacao 
             FROM categorias_servicos 
@@ -24,15 +23,21 @@ export const listServiceCategories = async (req, res, next) => {
     }
 };
 
-// POST /service-categories
+/**
+ * Cadastra uma nova categoria de serviço
+ * POST /service-categories
+ */
 export const createServiceCategory = async (req, res, next) => {
     try {
         const { cat_serv_nome } = req.body;
         
-        if (!cat_serv_nome) return res.status(400).json({ message: "Nome da categoria é obrigatório" });
+        if (!cat_serv_nome) {
+            return res.status(400).json({ status: 'error', message: "Nome da categoria é obrigatório" });
+        }
 
+        // Define true como padrão para situação se não for enviado
         const result = await pool.query(
-            `INSERT INTO categorias_servicos (cat_serv_nome) VALUES ($1) RETURNING *`,
+            `INSERT INTO categorias_servicos (cat_serv_nome, cat_serv_situacao) VALUES ($1, true) RETURNING *`,
             [cat_serv_nome]
         );
 
@@ -42,46 +47,101 @@ export const createServiceCategory = async (req, res, next) => {
     }
 };
 
-// PUT /service-categories/:id
+/**
+ * Atualiza uma categoria de serviço (PATCH Dinâmico)
+ * PATCH /service-categories/:id
+ */
 export const updateServiceCategory = async (req, res, next) => {
     try {
         const { id } = req.params;
-        // Agora aceitamos também o cat_serv_situacao
-        const { cat_serv_nome, cat_serv_situacao } = req.body;
+        const updates = req.body;
 
-        const result = await pool.query(
-            `UPDATE categorias_servicos 
-             SET cat_serv_nome = $1, cat_serv_situacao = $2 
-             WHERE cat_serv_id = $3 
-             RETURNING *`,
-            [cat_serv_nome, cat_serv_situacao, id]
-        );
+        // 1. Verifica se enviou algum dado
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Nenhum campo fornecido para atualização.'
+            });
+        }
+
+        // 2. Montagem Dinâmica da Query
+        const fields = [];
+        const values = [];
+        let index = 1;
+
+        // Campos permitidos para alteração
+        const allowedFields = ['cat_serv_nome', 'cat_serv_situacao'];
+
+        for (const key in updates) {
+            if (allowedFields.includes(key)) {
+                fields.push(`${key} = $${index}`);
+                values.push(updates[key]);
+                index++;
+            }
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Nenhum campo válido para atualização.'
+            });
+        }
+
+        // Adiciona o ID ao final dos valores
+        values.push(id);
+
+        const query = `
+            UPDATE categorias_servicos 
+            SET ${fields.join(', ')} 
+            WHERE cat_serv_id = $${index} 
+            RETURNING *
+        `;
+
+        const result = await pool.query(query, values);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ status: 'error', message: "Categoria não encontrada" });
+        }
 
         return res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
         next(error);
     }
 };
+
 /**
  * Remove uma categoria de serviço
  * DELETE /service-categories/:id
  */
 export const deleteServiceCategory = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    const query = `
-      DELETE FROM categorias_servicos
-      WHERE cat_serv_id = $1;
-    `;
+        const query = `
+            DELETE FROM categorias_servicos
+            WHERE cat_serv_id = $1
+            RETURNING cat_serv_id;
+        `;
 
-    await pool.query(query, [id]);
+        const result = await pool.query(query, [id]);
 
-    return res.json({
-      status: 'success',
-      message: `Categoria ${id} removida com sucesso.`
-    });
-  } catch (error) {
-    next(error);
-  }
+        if (result.rowCount === 0) {
+            return res.status(404).json({ status: 'error', message: "Categoria não encontrada" });
+        }
+
+        return res.json({
+            status: 'success',
+            message: `Categoria ${id} removida com sucesso.`
+        });
+    } catch (error) {
+        // Tratamento para Foreign Key (Erro 23503)
+        // Impede apagar categoria se houver serviços vinculados a ela
+        if (error.code === '23503') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Não é possível excluir esta categoria pois existem serviços vinculados a ela.'
+            });
+        }
+        next(error);
+    }
 };

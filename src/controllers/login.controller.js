@@ -1,16 +1,19 @@
 import pool from '../config/db.js';
-// Importamos a comparação
 import { comparePassword } from '../utils/password.utils.js';
+import jwt from 'jsonwebtoken';
 
 export const login = async (req, res, next) => {
   try {
-    const { usu_email, usu_senha } = req.body;
+    // 1. AJUSTE: Aceita tanto 'email' (do front) quanto 'usu_email'
+    const { email, password, usu_email, usu_senha } = req.body;
 
-    if (!usu_email || !usu_senha) {
+    const emailFinal = email || usu_email;
+    const senhaFinal = password || usu_senha;
+
+    if (!emailFinal || !senhaFinal) {
       return res.status(400).json({ status: 'error', message: 'E-mail e senha são obrigatórios.' });
     }
 
-    // 1. ATUALIZAÇÃO AQUI: Adicionei 'usu_situacao' na busca
     const query = `
       SELECT 
         usu_id, usu_nome, usu_email, usu_acesso, usu_senha, usu_situacao 
@@ -19,7 +22,7 @@ export const login = async (req, res, next) => {
       LIMIT 1;
     `;
 
-    const result = await pool.query(query, [usu_email]);
+    const result = await pool.query(query, [emailFinal]);
 
     // 2. Se não achou o email, rejeita
     if (result.rowCount === 0) {
@@ -28,37 +31,49 @@ export const login = async (req, res, next) => {
 
     const usuario = result.rows[0];
 
-    // --- NOVA VALIDAÇÃO DE STATUS ---
-    // --- VALIDAÇÃO DE STATUS (Mensagem Melhorada) ---
+    // --- VALIDAÇÃO DE STATUS ---
     if (!usuario.usu_situacao) {
         return res.status(403).json({ 
             status: 'error', 
-            // Mensagem personalizada que vai aparecer no SweetAlert
-            message: 'Seu usuário está inativo. Por favor, entre em contato com o administrador do sistema para regularizar seu acesso.' 
+            message: 'Seu usuário está inativo. Contate o administrador.' 
         });
     }
 
-    // 3. COMPARA A SENHA ENVIADA COM O HASH DO BANCO
-    const isMatch = await comparePassword(usu_senha, usuario.usu_senha);
+    // 3. COMPARA A SENHA
+    const isMatch = await comparePassword(senhaFinal, usuario.usu_senha);
 
     if (!isMatch) {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
     }
 
-    // 4. RETORNA SUCESSO
+    // 4. GERA O TOKEN
+    const token = jwt.sign(
+      {
+        usu_id: usuario.usu_id,
+        usu_email: usuario.usu_email,
+        usu_acesso: usuario.usu_acesso  
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    // 5. RETORNA SUCESSO
     return res.status(200).json({
       status: 'success',
       message: 'Login realizado com sucesso.',
+      token, // O Frontend vai pegar isso aqui e salvar no Cookie
       data: {
         usu_id: usuario.usu_id,
         usu_nome: usuario.usu_nome,
         usu_email: usuario.usu_email,
-        usu_acesso: usuario.usu_acesso
+        usu_acesso: usuario.usu_acesso,
+        role: usuario.usu_acesso // Adicionei 'role' para facilitar o front se precisar
       }
     });
 
   } catch (error) {
+    // 6. AJUSTE: Usa o next(error) para o middleware do app.js pegar
     console.error("Erro no login:", error);
-    res.status(500).json({ status: 'error', message: 'Erro interno no servidor.' });
+    next(error);
   }
 };

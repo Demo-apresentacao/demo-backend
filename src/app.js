@@ -2,6 +2,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+
+// 1. Verifique se o caminho está certo:
+// Se o swagger.config.js está na RAIZ e este arquivo está em 'src/', use '../'
+import swaggerSpecs from '../swagger.config.js'; 
 
 // Só carrega .env se NÃO for produção
 if (process.env.NODE_ENV !== 'production') {
@@ -16,9 +21,10 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "https://urban-front-2.vercel.app"
+  "https://urban-front-2.vercel.app" // Sua URL de produção do Front
 ];
 
+// 2. Atualização Importante no CORS
 app.use(cors({
   origin: function (origin, callback) {
     // Permite requests sem origin (Postman, Render healthcheck etc)
@@ -31,12 +37,17 @@ app.use(cors({
     }
   },
   credentials: true,
+  // ADICIONE ISSO: Permite que o Front envie o Token no header
+  allowedHeaders: ['Content-Type', 'Authorization'], 
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 
 app.use(express.json());
 
+// Rota para a documentação (Pode ficar aqui ou depois das rotas, tanto faz)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
+
 // Rotas
-import healthRoutes from './routes/health.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import vehiclesRoutes from './routes/vehicles.routes.js';
 import servicesRoutes from './routes/services.routes.js';
@@ -53,22 +64,27 @@ import modelsRoutes from './routes/models.routes.js';
 import loginRoutes from './routes/login.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 
-app.use('/health', healthRoutes); // Health check da API
-app.use('/users', usersRoutes); // Usuários
-app.use('/vehicles', vehiclesRoutes); // Veículos
-app.use('/services', servicesRoutes); // Serviços
-app.use('/availability', availabilityRoutes); // Disponibilidade
-app.use('/unavailability', unavailabilityRoutes); // Indisponibilidade
-app.use('/vehicle-users', vehicleUsersRoutes); // Associação veículo-usuário
-app.use('/agenda-services', agendaServicesRoutes); // Agenda de serviços
-app.use('/agenda-services-status', agendaServiceStatusRoutes); // Situações da agenda de serviços
-app.use('/appointments', appointmentsRoutes); // Agendamentos
-app.use('/categories', categoriesRoutes); // Categorias
-app.use('/service-categories', serviceCategoriesRoutes); // Categorias de serviços
-app.use('/brands', brandsRoutes); // Marcas
-app.use('/models', modelsRoutes); // Modelos
-app.use('/login', loginRoutes); // Autenticação
-app.use('/api/dashboard', dashboardRoutes) // Dashboard
+app.use('/users', usersRoutes);
+app.use('/vehicles', vehiclesRoutes);
+app.use('/services', servicesRoutes);
+app.use('/availability', availabilityRoutes);
+app.use('/unavailability', unavailabilityRoutes);
+app.use('/vehicle-users', vehicleUsersRoutes);
+app.use('/agenda-services', agendaServicesRoutes);
+app.use('/agenda-services-status', agendaServiceStatusRoutes); // Ajustei o nome para bater com o padrão
+app.use('/appointments', appointmentsRoutes);
+app.use('/categories', categoriesRoutes);
+app.use('/service-categories', serviceCategoriesRoutes);
+app.use('/brands', brandsRoutes);
+app.use('/models', modelsRoutes);
+
+// 3. MUDANÇA RECOMENDADA: Prefixo '/auth'
+// No frontend chamamos api.post('/auth/login'). 
+// Se deixar '/login', o front teria que chamar api.post('/login') ou api.post('/login/').
+app.use('/auth', loginRoutes); 
+
+// Mantive o padrão, mas verifique se suas rotas de dashboard começam com '/' ou '/dashboard'
+app.use('/api/dashboard', dashboardRoutes); 
 
 // Middleware global de erro
 import { errorHandler } from './middlewares/error.middleware.js';
