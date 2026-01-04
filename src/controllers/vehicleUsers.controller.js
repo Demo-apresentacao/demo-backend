@@ -89,11 +89,13 @@ export const listVehiclesByUser = async (req, res, next) => {
         v.veic_observ,
         v.veic_situacao,
         m.mod_nome,
-        ma.mar_nome
+        ma.mar_nome,
+        cat.cat_id
       FROM veiculo_usuario vu
       JOIN veiculos v ON v.veic_id = vu.veic_id
       JOIN modelos m ON v.mod_id = m.mod_id
       JOIN marcas ma ON m.mar_id = ma.mar_id
+      JOIN categorias cat ON ma.cat_id = cat.cat_id
       WHERE vu.usu_id = $1
         AND vu.data_final IS NULL
         AND v.veic_situacao = TRUE;

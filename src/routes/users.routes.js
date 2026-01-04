@@ -28,6 +28,28 @@ const router = Router();
 
 /**
  * @swagger
+ * /users:
+ *   post:
+ *     summary: Cria um novo usuário
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/User'
+ *     responses:
+ *       201:
+ *         description: Usuário criado com sucesso
+ */
+router.post('/', createUser);
+
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     User:
@@ -104,26 +126,6 @@ router.get('/', listUsers);
  */
 router.get('/:id', getUserById);
 
-/**
- * @swagger
- * /users:
- *   post:
- *     summary: Cria um novo usuário
- *     tags:
- *       - Users
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/User'
- *     responses:
- *       201:
- *         description: Usuário criado com sucesso
- */
-router.post('/', createUser);
 
 /**
  * @swagger
