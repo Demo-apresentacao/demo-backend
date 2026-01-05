@@ -74,6 +74,18 @@ export const listUsersByVehicle = async (req, res, next) => {
 export const listVehiclesByUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
+    
+    // Pegamos o status da query string (ex: ?status=all)
+    const { status } = req.query; 
+
+    // Montamos a condição de filtro dinamicamente
+    let statusCondition = '';
+    
+    // Se NÃO vier 'all', filtramos apenas os ativos (padrão antigo)
+    if (status !== 'all') {
+        statusCondition = 'AND v.veic_situacao = TRUE';
+    }
+    // Se vier 'all', statusCondition fica vazio e traz tudo (ativos e inativos)
 
     const query = `
       SELECT
@@ -98,8 +110,11 @@ export const listVehiclesByUser = async (req, res, next) => {
       JOIN categorias cat ON ma.cat_id = cat.cat_id
       WHERE vu.usu_id = $1
         AND vu.data_final IS NULL
-        AND v.veic_situacao = TRUE;
+        ${statusCondition}  -- <--- INSERIMOS A CONDIÇÃO AQUI
+      ORDER BY v.veic_situacao DESC, v.veic_id DESC; 
     `;
+
+    // Dica: Adicionei ORDER BY para mostrar os ATIVOS primeiro
 
     const result = await pool.query(query, [userId]);
 
