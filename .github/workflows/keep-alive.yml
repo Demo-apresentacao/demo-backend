@@ -1,0 +1,29 @@
+name: Keep Render API Awake
+
+on:
+  schedule:
+    # ------------------------------------------------------------------
+    # EXPLICAÇÃO DO HORÁRIO (CRON):
+    # O GitHub Actions usa horário UTC.
+    # Brasil (Brasília) é UTC-3.
+    #
+    # Queremos: 06:00 às 20:00 (Horário BR)
+    # Conta:    06 + 3 = 09 (UTC)
+    #           20 + 3 = 23 (UTC)
+    #
+    # Resultado: "*/10 9-23 * * *"
+    # Tradução: "A cada 10 minutos, entre as 09h e 23h UTC"
+    # ------------------------------------------------------------------
+    - cron: "*/10 9-23 * * *"
+  
+  workflow_dispatch: # Permite rodar manualmente pelo botão "Run workflow"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API health endpoint
+        # O flag -I pega apenas o cabeçalho (mais leve e rápido)
+        # O flag -s (silent) esconde a barra de progresso
+        run: |
+          curl -I -s https://urban-backend-4b5e.onrender.com/health
