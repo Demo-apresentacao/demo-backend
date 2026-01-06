@@ -12,7 +12,8 @@ import {
   getAppointmentById,
   createAppointment,
   updateAppointment,
-  cancelAppointment
+  cancelAppointment,
+  getPublicAppointmentStatus
 } from '../controllers/appointments.controller.js';
 
 const router = Router();
@@ -61,6 +62,27 @@ const router = Router();
  * Middleware de Segurança
  * Aplica a verificação de token (JWT) para todas as rotas abaixo.
  */
+
+/**
+ * @swagger
+ * /appointments/public/status/{token}:
+ *   get:
+ *     summary: Consulta pública de status do agendamento
+ *     tags:
+ *       - Appointments
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Status retornado
+ */
+router.get('/public/status/:token', getPublicAppointmentStatus);
+
+// --- MIDDLEWARE DE SEGURANÇA (BLOQUEIA TUDO DAQUI PRA BAIXO) ---
 router.use(verifyToken);
 
 /**

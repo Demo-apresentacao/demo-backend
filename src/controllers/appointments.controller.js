@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { randomUUID } from 'crypto';
 
 // --- FUNÇÕES AUXILIARES (HELPERS) ---
 
@@ -163,11 +164,12 @@ export const listAppointments = async (req, res, next) => {
         let queryText = `
           SELECT 
             a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
+            a.tracking_token,
             v.veic_placa, u.usu_nome,
             STRING_AGG(s.serv_nome, ', ') AS lista_servicos
           ${baseQuery}
           ${whereClause}
-          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, v.veic_placa, u.usu_nome 
+          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, a.tracking_token, v.veic_placa, u.usu_nome 
         `;
 
         let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
@@ -199,11 +201,11 @@ export const getAppointmentById = async (req, res, next) => {
         const { id } = req.params;
         const queryMain = `
            SELECT 
-                 a.*, 
-                 u.usu_nome, 
-                 u.usu_telefone, 
-                 m.mod_nome AS veic_modelo, 
-                 v.veic_placa
+                  a.*, 
+                  u.usu_nome, 
+                  u.usu_telefone, 
+                  m.mod_nome AS veic_modelo, 
+                  v.veic_placa
             FROM agendamentos    AS a
             JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
             JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
@@ -252,12 +254,17 @@ export const createAppointment = async (req, res, next) => {
 
         await client.query('BEGIN');
 
+        // 3. GERAMOS O TOKEN AQUI
+        const trackingToken = randomUUID();
+
+        // 4. INSERIMOS NO BANCO
         const insertAgendQuery = `
-            INSERT INTO agendamentos (veic_usu_id, agend_data, agend_horario, agend_observ, agend_situacao)
-            VALUES ($1, $2, $3, $4, 1)
-            RETURNING agend_id
+            INSERT INTO agendamentos (veic_usu_id, agend_data, agend_horario, agend_observ, agend_situacao, tracking_token)
+            VALUES ($1, $2, $3, $4, 1, $5)
+            RETURNING agend_id, tracking_token
         `;
-        const resAgend = await client.query(insertAgendQuery, [veic_usu_id, agend_data, agend_horario, agend_observ]);
+        // Adicionamos trackingToken como $5
+        const resAgend = await client.query(insertAgendQuery, [veic_usu_id, agend_data, agend_horario, agend_observ, trackingToken]);
         const newAgendId = resAgend.rows[0].agend_id;
 
         if (services && services.length > 0) {
@@ -274,7 +281,10 @@ export const createAppointment = async (req, res, next) => {
         return res.status(201).json({
             status: 'success',
             message: 'Agendamento criado com sucesso',
-            data: { agend_id: newAgendId }
+            data: {
+                agend_id: newAgendId,
+                tracking_token: trackingToken 
+            }
         });
 
     } catch (error) {
@@ -318,7 +328,7 @@ export const updateAppointment = async (req, res, next) => {
             // Mescla o que veio novo com o que já existe para validar
             const dateToCheck = updates.agend_data || currentData.agend_data; // Atenção: formate a data se necessário (YYYY-MM-DD)
             const timeToCheck = updates.agend_horario || currentData.agend_horario;
-            
+
             let servicesToCheck = [];
             if (hasServicesChange) {
                 servicesToCheck = updates.services;
@@ -377,7 +387,7 @@ export const updateAppointment = async (req, res, next) => {
         }
 
         await client.query('COMMIT');
-        
+
         // Busca o dado atualizado final para retornar
         const finalRes = await client.query('SELECT * FROM agendamentos WHERE agend_id = $1', [id]);
         return res.json({ status: 'success', message: 'Agendamento atualizado.', data: finalRes.rows[0] });
@@ -402,12 +412,49 @@ export const cancelAppointment = async (req, res, next) => {
         const { id } = req.params;
         const query = `UPDATE agendamentos SET agend_situacao = 0 WHERE agend_id = $1 RETURNING agend_id`;
         const result = await pool.query(query, [id]);
-        
+
         if (result.rowCount === 0) {
-             return res.status(404).json({ message: 'Agendamento não encontrado' });
+            return res.status(404).json({ message: 'Agendamento não encontrado' });
         }
 
         return res.json({ status: 'success', message: 'Agendamento cancelado' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /public/status/:token
+export const getPublicAppointmentStatus = async (req, res, next) => {
+    try {
+        const { token } = req.params;
+
+        const query = `
+            SELECT 
+                a.agend_data, 
+                a.agend_horario, 
+                a.agend_situacao,
+                m.mod_nome,   -- <--- CORREÇÃO: O nome vem da tabela 'modelos' (alias m)
+                ma.mar_nome,  -- Nome da marca
+                v.veic_placa  -- Vamos trazer a placa também
+            FROM agendamentos a
+            JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
+            JOIN veiculos v ON vu.veic_id = v.veic_id
+            JOIN modelos m ON v.mod_id = m.mod_id
+            JOIN marcas ma ON m.mar_id = ma.mar_id
+            WHERE a.tracking_token = $1
+        `;
+
+        const result = await pool.query(query, [token]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Agendamento não encontrado.' });
+        }
+
+        return res.json({
+            status: 'success',
+            data: result.rows[0]
+        });
+
     } catch (error) {
         next(error);
     }
