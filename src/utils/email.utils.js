@@ -3,19 +3,19 @@ import nodemailer from 'nodemailer';
 export const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true para 465, false para outras
+    port: 465,     // MUDANÇA 1: Usar porta SSL direta (mais estável em Cloud)
+    secure: true,  // MUDANÇA 2: true para porta 465
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // --- A SOLUÇÃO ESTÁ AQUI EMBAIXO ---
-    tls: {
-        ciphers: 'SSLv3', // Ajuda em conexões legadas
-        rejectUnauthorized: false // (Opcional) Evita erros de certificado em alguns containers
-    },
-    // O pulo do gato: Força o uso de IPv4
-    family: 4 
+    // MUDANÇA 3: Removemos o bloco 'tls' com 'SSLv3' (o Gmail não aceita mais)
+    // Mantemos apenas o family: 4 para garantir IPv4
+    family: 4, 
+    
+    // Debug para ver no log se funcionar
+    logger: true,
+    debug: true
   });
 
   const mailOptions = {
