@@ -64,9 +64,11 @@ import modelsRoutes from './routes/models.routes.js';
 import loginRoutes from './routes/login.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import healthRoutes from './routes/health.routes.js';
+import passwordRoutes from './routes/password.routes.js';
 
 // Rota de healthcheck (Keep-Alive)
 app.use('/health', healthRoutes);
+app.use('/auth/password', passwordRoutes);
 
 app.use('/users', usersRoutes);
 app.use('/vehicles', vehiclesRoutes);

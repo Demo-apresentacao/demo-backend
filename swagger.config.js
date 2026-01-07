@@ -36,7 +36,4 @@ const options = {
 
 const specs = swaggerJsdoc(options);
 
-console.log('Swagger paths:', Object.keys(specs.paths || {}));
-
-
 export default specs;
