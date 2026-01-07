@@ -1,18 +1,21 @@
 import nodemailer from 'nodemailer';
 
 export const sendEmail = async (options) => {
-  // CONFIGURAÇÃO EXPLÍCITA PARA EVITAR TIMEOUT
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,                 // Porta padrão para TLS
-    secure: false,             // false para porta 587 (usa STARTTLS)
+    port: 587,
+    secure: false, // true para 465, false para outras
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Adiciona logs detalhados no console do Render para debug
-    logger: true,
-    debug: true 
+    // --- A SOLUÇÃO ESTÁ AQUI EMBAIXO ---
+    tls: {
+        ciphers: 'SSLv3', // Ajuda em conexões legadas
+        rejectUnauthorized: false // (Opcional) Evita erros de certificado em alguns containers
+    },
+    // O pulo do gato: Força o uso de IPv4
+    family: 4 
   });
 
   const mailOptions = {
