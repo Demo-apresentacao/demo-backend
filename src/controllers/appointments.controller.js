@@ -248,6 +248,14 @@ export const createAppointment = async (req, res, next) => {
     try {
         const { veic_usu_id, agend_data, agend_horario, agend_observ, services } = req.body;
 
+        // Se o ID do veículo vier vazio ou não for número, retorna erro 400 e para aqui.
+        if (!veic_usu_id || veic_usu_id === "" || isNaN(Number(veic_usu_id))) {
+            return res.status(400).json({ 
+                status: 'error', 
+                message: 'Veículo inválido ou não informado. Por favor, selecione um veículo.' 
+            });
+        }
+
         // Validação de Conflito
         const servicesToCheck = (services && services.length > 0) ? services : [];
         await verificarConflito(client, agend_data, agend_horario, servicesToCheck);
@@ -281,7 +289,7 @@ export const createAppointment = async (req, res, next) => {
         return res.status(201).json({
             status: 'success',
             message: 'Agendamento criado com sucesso',
-            data: {
+            data: { 
                 agend_id: newAgendId,
                 tracking_token: trackingToken 
             }

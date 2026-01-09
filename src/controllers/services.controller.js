@@ -1,26 +1,35 @@
 import pool from '../config/db.js';
 
 // GET /services
-// Lista todos os serviços
 export const listServices = async (req, res, next) => {
   try {
     const { 
         search, 
         page = 1, 
-        limit = 10, 
-        status,
-        orderBy = 'serv_id',
-        orderDirection = 'DESC'
+        limit = 1000, 
+        status = 'active', 
+        orderBy = 'cat_serv_nome', 
+        orderDirection = 'ASC'
     } = req.query;
 
     const offset = (page - 1) * limit;
 
-    // --- LÓGICA DE ORDENAÇÃO SEGURA ---
-    const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao'];
-    const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'serv_id';
-    const safeDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    // --- LÓGICA DE ORDENAÇÃO AVANÇADA ---
+    // Adicionamos 'cat_serv_nome' na lista de permitidos
+    const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao', 'cat_serv_nome'];
+    const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'cat_serv_nome';
+    const safeDirection = orderDirection.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     
-    const orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
+    let orderByClause = '';
+
+    // Se for ordenar por Categoria, usamos o alias 'cs' e desempatamos pelo nome do serviço
+    if (safeColumn === 'cat_serv_nome') {
+        orderByClause = `ORDER BY cs.cat_serv_nome ${safeDirection}, s.serv_nome ASC`;
+    } 
+    // Se for qualquer outra coisa, usamos o alias 's' (tabela servicos)
+    else {
+        orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
+    }
 
     // --- MONTAGEM DA QUERY ---
     let queryText = `
@@ -106,6 +115,7 @@ export const listServicesByCategory = async (req, res, next) => {
         JOIN  categorias_servicos cs
           ON  s.cat_serv_id = cs.cat_serv_id
         WHERE s.cat_serv_id = $1
+          AND s.serv_situacao = true  -- CORREÇÃO: Força apenas ativos nesta lista também
         ORDER BY s.serv_nome ASC;
     `;
 
