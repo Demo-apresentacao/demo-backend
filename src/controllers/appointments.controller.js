@@ -149,10 +149,11 @@ export const listAppointments = async (req, res, next) => {
             paramCounter++;
         }
         if (date) {
-            conditions.push(`a.agend_data = $${paramCounter}`);
+            conditions.push(`DATE(a.agend_data) = $${paramCounter}`);
             values.push(date);
             paramCounter++;
         }
+
         if (status) {
             conditions.push(`a.agend_situacao = $${paramCounter}`);
             values.push(status);
@@ -250,9 +251,9 @@ export const createAppointment = async (req, res, next) => {
 
         // Se o ID do veículo vier vazio ou não for número, retorna erro 400 e para aqui.
         if (!veic_usu_id || veic_usu_id === "" || isNaN(Number(veic_usu_id))) {
-            return res.status(400).json({ 
-                status: 'error', 
-                message: 'Veículo inválido ou não informado. Por favor, selecione um veículo.' 
+            return res.status(400).json({
+                status: 'error',
+                message: 'Veículo inválido ou não informado. Por favor, selecione um veículo.'
             });
         }
 
@@ -289,9 +290,9 @@ export const createAppointment = async (req, res, next) => {
         return res.status(201).json({
             status: 'success',
             message: 'Agendamento criado com sucesso',
-            data: { 
+            data: {
                 agend_id: newAgendId,
-                tracking_token: trackingToken 
+                tracking_token: trackingToken
             }
         });
 
