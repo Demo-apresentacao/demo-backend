@@ -18,11 +18,9 @@ import './config/db.js';
 
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "https://urban-front-2.vercel.app" // Sua URL de produção do Front
-];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [];
 
 // 2. Atualização Importante no CORS
 app.use(cors({
