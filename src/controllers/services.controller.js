@@ -1,6 +1,100 @@
 import pool from '../config/db.js';
 
 // GET /services
+// export const listServices = async (req, res, next) => {
+//   try {
+//     const { 
+//         search, 
+//         page = 1, 
+//         limit = 1000, 
+//         status = 'active', 
+//         orderBy = 'cat_serv_nome', 
+//         orderDirection = 'ASC'
+//     } = req.query;
+
+//     const offset = (page - 1) * limit;
+
+//     // --- LÓGICA DE ORDENAÇÃO AVANÇADA ---
+//     // Adicionamos 'cat_serv_nome' na lista de permitidos
+//     const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao', 'cat_serv_nome'];
+//     const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'cat_serv_nome';
+//     const safeDirection = orderDirection.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    
+//     let orderByClause = '';
+
+//     // Se for ordenar por Categoria, usamos o alias 'cs' e desempatamos pelo nome do serviço
+//     if (safeColumn === 'cat_serv_nome') {
+//         orderByClause = `ORDER BY cs.cat_serv_nome ${safeDirection}, s.serv_nome ASC`;
+//     } 
+//     // Se for qualquer outra coisa, usamos o alias 's' (tabela servicos)
+//     else {
+//         orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
+//     }
+
+//     // --- MONTAGEM DA QUERY ---
+//     let queryText = `
+//       SELECT
+//             s.serv_id, s.cat_serv_id, cs.cat_serv_nome, s.serv_nome,
+//             s.serv_duracao, s.serv_preco, s.serv_descricao, s.serv_situacao
+//       FROM  servicos s
+//       JOIN  categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
+//     `;
+
+//     let countQuery = `
+//       SELECT COUNT(*) as total 
+//       FROM servicos s
+//       JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
+//     `;
+
+//     const conditions = [];
+//     const values = [];
+//     let paramIndex = 1;
+
+//     // Filtros
+//     if (search) {
+//       conditions.push(`(s.serv_nome ILIKE $${paramIndex} OR s.serv_descricao ILIKE $${paramIndex})`);
+//       values.push(`%${search}%`);
+//       paramIndex++;
+//     }
+
+//     if (status && status !== 'all') {
+//       const statusBool = status === 'active';
+//       conditions.push(`s.serv_situacao = $${paramIndex}`);
+//       values.push(statusBool);
+//       paramIndex++;
+//     }
+
+//     // Aplica WHERE
+//     if (conditions.length > 0) {
+//       const whereClause = ` WHERE ` + conditions.join(' AND ');
+//       queryText += whereClause;
+//       countQuery += whereClause;
+//     }
+
+//     // Aplica ORDER BY e Paginação
+//     queryText += ` ${orderByClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+//     values.push(limit, offset);
+
+//     // Executa
+//     const result = await pool.query(queryText, values);
+    
+//     const countValues = values.slice(0, paramIndex - 1);
+//     const countResult = await pool.query(countQuery, countValues);
+    
+//     const totalItems = parseInt(countResult.rows[0].total);
+//     const totalPages = Math.ceil(totalItems / limit);
+
+//     return res.status(200).json({
+//       status: 'success',
+//       data: result.rows,
+//       meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
+//     });
+
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 export const listServices = async (req, res, next) => {
   try {
     const { 
@@ -16,7 +110,7 @@ export const listServices = async (req, res, next) => {
 
     // --- LÓGICA DE ORDENAÇÃO AVANÇADA ---
     // Adicionamos 'cat_serv_nome' na lista de permitidos
-    const sortableColumns = ['serv_id', 'serv_nome', 'serv_preco', 'serv_duracao', 'serv_situacao', 'cat_serv_nome'];
+    const sortableColumns = ['serv_id', 'serv_nome', 'stv_preco', 'stv_duracao', 'serv_situacao', 'cat_serv_nome'];
     const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'cat_serv_nome';
     const safeDirection = orderDirection.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     
@@ -33,11 +127,19 @@ export const listServices = async (req, res, next) => {
 
     // --- MONTAGEM DA QUERY ---
     let queryText = `
-      SELECT
-            s.serv_id, s.cat_serv_id, cs.cat_serv_nome, s.serv_nome,
-            s.serv_duracao, s.serv_preco, s.serv_descricao, s.serv_situacao
-      FROM  servicos s
-      JOIN  categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
+         SELECT s.serv_id, 
+                s.cat_serv_id, 
+                cs.cat_serv_nome, 
+                s.serv_nome,
+                s.serv_descricao,
+                s.serv_situacao,
+                stv.stv_preco,
+                stv.stv_duracao,
+                tvs.tps_nome
+           FROM servicos              AS s
+      LEFT JOIN categorias_servicos   AS cs  ON s.cat_serv_id = cs.cat_serv_id
+      LEFT JOIN servicos_tipo_veiculo AS stv ON s.serv_id     = stv.serv_id
+      LEFT JOIN tipo_veiculo_servico  AS tvs ON stv.tps_id    = tvs.tps_id
     `;
 
     let countQuery = `
