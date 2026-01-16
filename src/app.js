@@ -63,6 +63,7 @@ import loginRoutes from './routes/login.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import passwordRoutes from './routes/password.routes.js';
+import getCategoriesVehiclesForServicesRoutes from './routes/categoriesVehiclesForServices.routes.js'
 
 // Rota de healthcheck (Keep-Alive)
 app.use('/health', healthRoutes);
@@ -75,19 +76,16 @@ app.use('/availability', availabilityRoutes);
 app.use('/unavailability', unavailabilityRoutes);
 app.use('/vehicle-users', vehicleUsersRoutes);
 app.use('/agenda-services', agendaServicesRoutes);
-app.use('/agenda-services-status', agendaServiceStatusRoutes); // Ajustei o nome para bater com o padrão
+app.use('/agenda-services-status', agendaServiceStatusRoutes);
 app.use('/appointments', appointmentsRoutes);
 app.use('/categories', categoriesRoutes);
 app.use('/service-categories', serviceCategoriesRoutes);
 app.use('/brands', brandsRoutes);
 app.use('/models', modelsRoutes);
+app.use('/categories-vehicles-for-services', getCategoriesVehiclesForServicesRoutes);
 
-// 3. MUDANÇA RECOMENDADA: Prefixo '/auth'
-// No frontend chamamos api.post('/auth/login'). 
-// Se deixar '/login', o front teria que chamar api.post('/login') ou api.post('/login/').
 app.use('/auth', loginRoutes); 
 
-// Mantive o padrão, mas verifique se suas rotas de dashboard começam com '/' ou '/dashboard'
 app.use('/api/dashboard', dashboardRoutes); 
 
 // Middleware global de erro
