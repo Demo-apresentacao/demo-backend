@@ -6,7 +6,12 @@ import { randomUUID } from 'crypto';
 // Converte string "HH:MM:SS" para minutos totais (ex: "01:30" -> 90)
 const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
-    const [h, m] = timeStr.split(':').map(Number);
+    // Se vier null ou undefined do banco, trata como 0
+    if (typeof timeStr !== 'string') return 0;
+    
+    const parts = timeStr.split(':');
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
     return (h * 60) + m;
 };
 
@@ -23,23 +28,41 @@ const isOverlapping = (startA, endA, startB, endB) => {
     return (startA < endB) && (endA > startB);
 };
 
-// Função Principal de Validação de Conflito e Horário de Expediente
-const verificarConflito = async (client, agendData, agendHorario, serviceIds, excludeAgendId = null) => {
+// --- FUNÇÃO PRINCIPAL DE VALIDAÇÃO (CORRIGIDA) ---
+// Agora recebe veicUsuId para buscar a duração correta da categoria do carro
+const verificarConflito = async (client, agendData, agendHorario, serviceIds, veicUsuId, excludeAgendId = null) => {
+    
     // 1. Calcular a duração total dos serviços solicitados
     let totalDurationMinutes = 0;
 
     if (serviceIds && serviceIds.length > 0) {
-        const servicesQuery = `
-            SELECT serv_duracao FROM servicos WHERE serv_id = ANY($1::int[])
+        // QUERY CORRIGIDA: Busca a duração na tabela servicos_tipo_veiculo
+        // baseada na categoria do veículo selecionado
+        const durationQuery = `
+            SELECT stv.stv_duracao
+            FROM servicos_tipo_veiculo stv
+            JOIN servicos s ON stv.serv_id = s.serv_id
+            -- Joins para chegar do Veículo do Usuário até a Categoria/Tipo de Preço
+            JOIN categorias c ON stv.tps_id = c.tps_id
+            JOIN marcas ma ON c.cat_id = ma.cat_id
+            JOIN modelos m ON ma.mar_id = m.mar_id
+            JOIN veiculos v ON m.mod_id = v.mod_id
+            JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id
+            
+            WHERE vu.veic_usu_id = $1  -- O veículo sendo agendado
+              AND stv.serv_id = ANY($2::int[]) -- Os serviços selecionados
+              AND stv.stv_situacao = true
         `;
-        const resServices = await client.query(servicesQuery, [serviceIds]);
+        
+        const resServices = await client.query(durationQuery, [veicUsuId, serviceIds]);
 
         resServices.rows.forEach(s => {
-            totalDurationMinutes += timeToMinutes(s.serv_duracao);
+            totalDurationMinutes += timeToMinutes(s.stv_duracao);
         });
     }
 
-    if (totalDurationMinutes === 0) totalDurationMinutes = 30; // Mínimo padrão
+    // Se não achou duração (ex: serviço sem tempo cadastrado), assume 30min padrão
+    if (totalDurationMinutes === 0) totalDurationMinutes = 30;
 
     const startMin = timeToMinutes(agendHorario);
     const endMin = startMin + totalDurationMinutes;
@@ -63,17 +86,28 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ex
     }
 
     // 2. Busca conflitos com OUTROS agendamentos
+    // AQUI TAMBÉM PRECISAMOS DA DURAÇÃO REAL DOS AGENDAMENTOS EXISTENTES
+    // Mas como o agendamento já existe, ele já tem serviços salvos.
+    // Para simplificar, vamos somar a duração dos serviços salvos desses agendamentos.
     const existingQuery = `
         SELECT 
              a.agend_id, 
              a.agend_horario, 
              v.veic_placa,
-             SUM(EXTRACT(EPOCH FROM s.serv_duracao)/60) as duracao_total_min
+             -- Soma a duração dos serviços daquele agendamento específico
+             -- Precisamos fazer o join completo de novo para garantir a duração correta da categoria
+             SUM(EXTRACT(EPOCH FROM stv.stv_duracao)/60) as duracao_total_min
         FROM agendamentos     AS a
         JOIN veiculo_usuario  AS vu ON a.veic_usu_id = vu.veic_usu_id
         JOIN veiculos         AS v  ON vu.veic_id    = v.veic_id
+        JOIN modelos          AS m  ON v.mod_id      = m.mod_id
+        JOIN marcas           AS ma ON m.mar_id      = ma.mar_id
+        JOIN categorias       AS c  ON ma.cat_id     = c.cat_id
+        
         LEFT JOIN agenda_servicos AS ags ON a.agend_id = ags.agend_id
-        LEFT JOIN servicos        AS s   ON ags.serv_id  = s.serv_id
+        LEFT JOIN servicos_tipo_veiculo AS stv 
+             ON ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id -- Match Serviço + Categoria do Carro
+             
         WHERE a.agend_data = $1 
           AND a.agend_situacao != 0 
           ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
@@ -131,12 +165,12 @@ export const listAppointments = async (req, res, next) => {
         }
 
         let baseQuery = `
-               FROM agendamentos    AS a
-               JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
-               JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
-               JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
-          LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
-          LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+                FROM agendamentos    AS a
+                JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
+                JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
+                JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
+           LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
+           LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
         `;
 
         const conditions = [];
@@ -201,18 +235,18 @@ export const getAppointmentById = async (req, res, next) => {
     try {
         const { id } = req.params;
         const queryMain = `
-           SELECT 
+            SELECT 
                   a.*, 
                   u.usu_nome, 
                   u.usu_telefone, 
                   m.mod_nome AS veic_modelo, 
                   v.veic_placa
-            FROM agendamentos    AS a
-            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
-            JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
-            JOIN veiculos        AS v ON vu.veic_id     = v.veic_id
-            JOIN modelos         AS m ON v.mod_id       = m.mod_id
-           WHERE a.agend_id = $1
+             FROM agendamentos    AS a
+             JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+             JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
+             JOIN veiculos        AS v ON vu.veic_id     = v.veic_id
+             JOIN modelos         AS m ON v.mod_id       = m.mod_id
+            WHERE a.agend_id = $1
         `;
         const resultMain = await pool.query(queryMain, [id]);
 
@@ -220,11 +254,14 @@ export const getAppointmentById = async (req, res, next) => {
             return res.status(404).json({ message: 'Agendamento não encontrado' });
         }
 
+        // Para pegar o preço e duração corretos, precisamos fazer o JOIN complexo aqui também
+        // Mas para visualização simples, pegar da tabela 'servicos' (nome) geralmente basta.
+        // Se quiser mostrar o preço histórico, teria que salvar o preço no momento do agendamento (sugestão futura).
+        // Por enquanto, vamos pegar o nome do serviço base.
         const queryServices = `
         SELECT ags.agend_serv_id, 
                s.serv_id, 
                s.serv_nome, 
-               s.serv_preco,
                sit.agend_serv_situ_nome
         FROM   agenda_servicos ags
         JOIN   servicos AS s ON ags.serv_id = s.serv_id
@@ -249,7 +286,6 @@ export const createAppointment = async (req, res, next) => {
     try {
         const { veic_usu_id, agend_data, agend_horario, agend_observ, services } = req.body;
 
-        // Se o ID do veículo vier vazio ou não for número, retorna erro 400 e para aqui.
         if (!veic_usu_id || veic_usu_id === "" || isNaN(Number(veic_usu_id))) {
             return res.status(400).json({
                 status: 'error',
@@ -257,22 +293,22 @@ export const createAppointment = async (req, res, next) => {
             });
         }
 
-        // Validação de Conflito
+        // Validação de Conflito (Agora passando o veic_usu_id)
         const servicesToCheck = (services && services.length > 0) ? services : [];
-        await verificarConflito(client, agend_data, agend_horario, servicesToCheck);
+        
+        // --- MUDANÇA AQUI: Passamos veic_usu_id ---
+        await verificarConflito(client, agend_data, agend_horario, servicesToCheck, veic_usu_id);
 
         await client.query('BEGIN');
 
-        // 3. GERAMOS O TOKEN AQUI
         const trackingToken = randomUUID();
 
-        // 4. INSERIMOS NO BANCO
         const insertAgendQuery = `
             INSERT INTO agendamentos (veic_usu_id, agend_data, agend_horario, agend_observ, agend_situacao, tracking_token)
             VALUES ($1, $2, $3, $4, 1, $5)
             RETURNING agend_id, tracking_token
         `;
-        // Adicionamos trackingToken como $5
+        
         const resAgend = await client.query(insertAgendQuery, [veic_usu_id, agend_data, agend_horario, agend_observ, trackingToken]);
         const newAgendId = resAgend.rows[0].agend_id;
 
@@ -312,16 +348,14 @@ export const createAppointment = async (req, res, next) => {
 
 /**
  * Atualiza um agendamento (PATCH Dinâmico)
- * Verifica conflitos apenas se data/hora/serviços mudarem
  */
 export const updateAppointment = async (req, res, next) => {
     const client = await pool.connect();
     try {
         const { id } = req.params;
-        const updates = req.body; // Campos que vieram do frontend
+        const updates = req.body; 
 
-        // 1. Buscar o agendamento atual no banco para ter os dados antigos
-        // Isso é crucial para o PATCH e para verificar conflitos mesclando dados novos e velhos
+        // 1. Buscar o agendamento atual
         const currentRes = await client.query('SELECT * FROM agendamentos WHERE agend_id = $1', [id]);
         if (currentRes.rows.length === 0) {
             return res.status(404).json({ message: "Agendamento não encontrado" });
@@ -329,37 +363,35 @@ export const updateAppointment = async (req, res, next) => {
         const currentData = currentRes.rows[0];
 
         // 2. Determinar se precisamos rodar a verificação de conflito
-        // Só rodamos se mudou a data, o horário, ou a lista de serviços
         const hasTimeChange = (updates.agend_data || updates.agend_horario);
         const hasServicesChange = (updates.services && Array.isArray(updates.services));
+        const hasVehicleChange = (updates.veic_usu_id); // Se mudar o veículo, muda a duração!
 
-        if (hasTimeChange || hasServicesChange) {
-            // Mescla o que veio novo com o que já existe para validar
-            const dateToCheck = updates.agend_data || currentData.agend_data; // Atenção: formate a data se necessário (YYYY-MM-DD)
+        if (hasTimeChange || hasServicesChange || hasVehicleChange) {
+            const dateToCheck = updates.agend_data || currentData.agend_data; 
             const timeToCheck = updates.agend_horario || currentData.agend_horario;
+            const vehicleToCheck = updates.veic_usu_id || currentData.veic_usu_id; // Importante pegar o veículo atual se não mudou
 
             let servicesToCheck = [];
             if (hasServicesChange) {
                 servicesToCheck = updates.services;
             } else {
-                // Se não mandou serviços novos, busca os atuais do banco para calcular duração
                 const currentServicesRes = await client.query(
                     `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`, [id]
                 );
                 servicesToCheck = currentServicesRes.rows.map(row => row.serv_id);
             }
 
-            // Valida conflito ignorando o próprio ID
-            await verificarConflito(client, dateToCheck, timeToCheck, servicesToCheck, id);
+            // --- MUDANÇA AQUI: Passamos vehicleToCheck ---
+            await verificarConflito(client, dateToCheck, timeToCheck, servicesToCheck, vehicleToCheck, id);
         }
 
         await client.query('BEGIN');
 
-        // 3. Montagem Dinâmica da Query de Update (Apenas campos enviados)
         const fields = [];
         const values = [];
         let index = 1;
-        const allowedFields = ['agend_data', 'agend_horario', 'agend_observ', 'agend_situacao'];
+        const allowedFields = ['veic_usu_id', 'agend_data', 'agend_horario', 'agend_observ', 'agend_situacao'];
 
         for (const key in updates) {
             if (allowedFields.includes(key)) {
@@ -369,7 +401,6 @@ export const updateAppointment = async (req, res, next) => {
             }
         }
 
-        // Se houver campos para atualizar na tabela principal
         if (fields.length > 0) {
             values.push(id);
             const updateQuery = `
@@ -381,9 +412,7 @@ export const updateAppointment = async (req, res, next) => {
             await client.query(updateQuery, values);
         }
 
-        // 4. Atualiza Serviços (apenas se o array foi enviado explicitamente)
         if (hasServicesChange) {
-            // Remove antigos e insere novos
             await client.query(`DELETE FROM agenda_servicos WHERE agend_id = $1`, [id]);
             if (updates.services.length > 0) {
                 for (const servId of updates.services) {
@@ -397,7 +426,6 @@ export const updateAppointment = async (req, res, next) => {
 
         await client.query('COMMIT');
 
-        // Busca o dado atualizado final para retornar
         const finalRes = await client.query('SELECT * FROM agendamentos WHERE agend_id = $1', [id]);
         return res.json({ status: 'success', message: 'Agendamento atualizado.', data: finalRes.rows[0] });
 
@@ -442,9 +470,9 @@ export const getPublicAppointmentStatus = async (req, res, next) => {
                 a.agend_data, 
                 a.agend_horario, 
                 a.agend_situacao,
-                m.mod_nome,   -- <--- CORREÇÃO: O nome vem da tabela 'modelos' (alias m)
-                ma.mar_nome,  -- Nome da marca
-                v.veic_placa  -- Vamos trazer a placa também
+                m.mod_nome, 
+                ma.mar_nome, 
+                v.veic_placa 
             FROM agendamentos a
             JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
             JOIN veiculos v ON vu.veic_id = v.veic_id
