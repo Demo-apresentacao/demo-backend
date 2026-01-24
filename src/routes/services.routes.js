@@ -9,10 +9,11 @@ import { verifyToken } from '../middlewares/auth.middleware.js';
 
 import {
   listServices,
-  // listServicesByCategory,
+  listServicesByCategory,
   getServiceById,
   createService,
   updateService,
+  getServicesByVehicle,
   toggleServiceStatus,
   deleteService
 } from '../controllers/services.controller.js';
@@ -103,7 +104,7 @@ router.get('/', listServices);
  *       200:
  *         description: Lista de serviços filtrados por categoria
  */
-// router.get('/category/:cat_serv_id', listServicesByCategory);
+router.get('/category/:cat_serv_id', listServicesByCategory);
 
 /**
  * @swagger
@@ -223,5 +224,7 @@ router.patch('/:serv_id/status', toggleServiceStatus);
  *         description: Serviço não encontrado
  */
 router.delete('/:serv_id', deleteService);
+
+router.get('/vehicle/:veic_usu_id', getServicesByVehicle);
 
 export default router;
