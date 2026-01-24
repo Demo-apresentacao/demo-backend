@@ -124,37 +124,53 @@ export const listServices = async (req, res, next) => {
 ========================================================= */
 export const getServiceById = async (req, res, next) => {
   try {
+    // Note: mudei para 'id' ou 'serv_id' dependendo de como está sua rota
+    // Se a rota for /services/:id, use req.params.id
     const { serv_id } = req.params;
 
     const result = await pool.query(
       `
-         SELECT s.serv_id,
-                s.serv_nome,
-                s.serv_descricao,
-                s.cat_serv_id,
-                s.serv_situacao,
-                json_agg(
-                  json_build_object(
-                    'tps_id', tvs.tps_id,
-                    'preco', stv.stv_preco,
-                    'duracao', stv.stv_duracao
-                  )
-                ) AS precos
-           FROM servicos AS s
+      SELECT 
+        s.serv_id,
+        s.serv_nome,
+        s.serv_descricao,
+        s.cat_serv_id,
+        s.serv_situacao,
+        
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'tps_id', tvs.tps_id,
+              'tps_nome', tvs.tps_nome,
+              'preco', stv.stv_preco,
+              'duracao', stv.stv_duracao
+            )
+          ) FILTER (WHERE tvs.tps_id IS NOT NULL), 
+          '[]'
+        ) AS precos
+      FROM servicos AS s
       LEFT JOIN servicos_tipo_veiculo AS stv ON stv.serv_id = s.serv_id
-      LEFT JOIN tipo_veiculo_servico  AS tvs ON tvs.tps_id  = stv.tps_id
-          WHERE s.serv_id = $1
-       GROUP BY s.serv_id
+      LEFT JOIN tipo_veiculo_servico AS tvs ON tvs.tps_id = stv.tps_id
+      WHERE s.serv_id = $1
+      GROUP BY s.serv_id, s.serv_nome, s.serv_descricao, s.cat_serv_id, s.serv_situacao
       `,
       [serv_id]
     );
 
-    if (!result.rows.length) {
-      return res.status(404).json({ status: 'error', message: 'Serviço não encontrado' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Serviço não encontrado'
+      });
     }
 
-    res.json({ status: 'success', data: result.rows[0] });
+    // Retorna o objeto formatado
+    res.json({
+      status: 'success',
+      data: result.rows[0]
+    });
   } catch (error) {
+    console.error("Erro em getServiceById:", error);
     next(error);
   }
 };
@@ -256,7 +272,12 @@ export const updateService = async (req, res, next) => {
         INSERT INTO servicos_tipo_veiculo (serv_id, tps_id, stv_preco, stv_duracao)
         VALUES ($1, $2, $3, $4)
         `,
-        [serv_id, p.cat_veic_id, p.preco, p.duracao]
+        [
+          serv_id,
+          p.tps_id,
+          p.preco || 0,             
+          p.duracao || '00:00:00'  
+        ]
       );
     }
 
@@ -294,6 +315,53 @@ export const toggleServiceStatus = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+export const getServicesByVehicle = async (req, res, next) => {
+    try {
+        const { veic_usu_id } = req.params;
+
+        if (!veic_usu_id) {
+            return res.status(400).json({ status: 'error', message: 'ID do veículo não informado.' });
+        }
+
+        const query = `
+            SELECT 
+                s.serv_id, 
+                s.serv_nome, 
+                s.serv_descricao,
+                stv.stv_preco as serv_preco, 
+                stv.stv_duracao,
+                cs.cat_serv_nome,
+                tvs.tps_nome as categoria_cobranca -- Apenas para debug/conferência
+            FROM veiculo_usuario vu
+            JOIN veiculos v ON vu.veic_id = v.veic_id
+            JOIN modelos m ON v.mod_id = m.mod_id
+            JOIN marcas ma ON m.mar_id = ma.mar_id
+            JOIN categorias c ON ma.cat_id = c.cat_id
+            JOIN servicos_tipo_veiculo stv ON c.tps_id = stv.tps_id 
+            JOIN tipo_veiculo_servico tvs ON stv.tps_id = tvs.tps_id
+            JOIN servicos s ON stv.serv_id = s.serv_id
+            LEFT JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
+            
+            WHERE vu.veic_usu_id = $1
+              AND s.serv_situacao = true
+              AND stv.stv_situacao = true
+            ORDER BY cs.cat_serv_nome ASC, s.serv_nome ASC;
+        `;
+
+        const result = await pool.query(query, [veic_usu_id]);
+
+        return res.json({
+            status: 'success',
+            data: result.rows
+        });
+
+    } catch (error) {
+        // Isso vai ajudar a ver o erro real no console do backend se acontecer de novo
+        console.error("Erro SQL Detalhado:", error);
+        next(error);
+    }
 };
 
 /* =========================================================
