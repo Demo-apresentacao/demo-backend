@@ -3,12 +3,12 @@ import pool from '../config/db.js';
 export const getDashboardStats = async (req, res, next) => {
     try {
         const client = await pool.connect();
-        
+
         // 1. Definições de Tempo
         const now = new Date();
         const hoje = now.toISOString().split('T')[0];
         const mesAtual = now.toISOString().slice(0, 7);
-        
+
         try {
             // --- BLOCO 1: EM ANDAMENTO (CORRIGIDO) ---
             // Prioridade:
@@ -42,18 +42,25 @@ export const getDashboardStats = async (req, res, next) => {
             const [clientesRes, veiculosHojeRes, faturamentoRes, concluidosRes, proximasRes, graficoRes] = await Promise.all([
                 // 1. Total Clientes
                 client.query('SELECT COUNT(*) FROM usuarios'),
-                
+
                 // 2. Veículos Hoje (Exclui cancelados status 0)
                 client.query('SELECT COUNT(*) FROM agendamentos WHERE agend_data = $1 AND agend_situacao != 0', [hoje]),
-                
+
                 // 3. Faturamento Mês (Considera apenas CONCLUÍDOS status 3)
                 // Usando COALESCE para retornar 0 se for null
                 client.query(`
-                    SELECT COALESCE(SUM(s.serv_preco), 0) as total 
+                    SELECT COALESCE(SUM(precificacao.media_preco), 0) as total 
                     FROM agenda_servicos ags
-                    JOIN servicos s ON ags.serv_id = s.serv_id
                     JOIN agendamentos a ON ags.agend_id = a.agend_id
-                    WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1 AND a.agend_situacao = 3
+
+                    JOIN (
+                        SELECT serv_id, AVG(stv_preco) as media_preco
+                        FROM servicos_tipo_veiculo
+                        GROUP BY serv_id
+                    ) precificacao ON ags.serv_id = precificacao.serv_id
+
+                    WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1 
+                    AND a.agend_situacao = 3
                 `, [mesAtual]),
 
                 // 4. Concluídos Mês
