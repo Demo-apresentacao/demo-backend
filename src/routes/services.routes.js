@@ -9,7 +9,7 @@ import { verifyToken } from '../middlewares/auth.middleware.js';
 
 import {
   listServices,
-  listServicesByCategory,
+  // listServicesByCategory,
   getServiceById,
   createService,
   updateService,
