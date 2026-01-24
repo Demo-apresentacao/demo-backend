@@ -104,7 +104,7 @@ router.get('/', listServices);
  *       200:
  *         description: Lista de serviços filtrados por categoria
  */
-router.get('/category/:cat_serv_id', listServicesByCategory);
+// router.get('/category/:cat_serv_id', listServicesByCategory);
 
 /**
  * @swagger
