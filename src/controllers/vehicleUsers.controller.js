@@ -1,20 +1,16 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as associações entre veículos e usuários
- * GET /vehicle-users
- */
+
 export const listVehicleUsers = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        veic_usu_id,
-        veic_id,
-        usu_id,
-        ehproprietario,
-        data_inicial,
-        data_final
-      FROM veiculo_usuario
+        SELECT veic_usu_id,
+               veic_id,
+               usu_id,
+               ehproprietario,
+               data_inicial,
+               data_final
+          FROM veiculo_usuario
       ORDER BY veic_usu_id DESC;
     `;
 
@@ -30,29 +26,28 @@ export const listVehicleUsers = async (req, res, next) => {
   }
 };
 
-/**
- * Lista os usuários associados a um veículo específico
- * GET /vehicle-users/vehicle/:vehicleId
- */
+
+
 export const listUsersByVehicle = async (req, res, next) => {
   try {
     const { vehicleId } = req.params;
 
     const query = `
-      SELECT
-        vu.veic_usu_id,
-        vu.veic_id,
-        vu.usu_id,
-        vu.ehproprietario,
-        vu.data_inicial,
-        vu.data_final,
-        u.usu_nome,
-        u.usu_cpf,
-        u.usu_telefone
-      FROM veiculo_usuario vu
-      JOIN usuarios u ON u.usu_id = vu.usu_id
-      WHERE vu.veic_id = $1
-      ORDER BY vu.data_final IS NOT NULL, vu.data_final DESC, vu.data_inicial DESC;
+        SELECT vu.veic_usu_id,
+               vu.veic_id,
+               vu.usu_id,
+               vu.ehproprietario,
+               vu.data_inicial,
+               vu.data_final,
+               u.usu_nome,
+               u.usu_cpf,
+               u.usu_telefone
+          FROM veiculo_usuario AS vu
+          JOIN usuarios    AS u ON u.usu_id = vu.usu_id
+         WHERE vu.veic_id = $1
+      ORDER BY vu.data_final IS NOT NULL, 
+               vu.data_final DESC, 
+               vu.data_inicial DESC;
     `;
 
     const result = await pool.query(query, [vehicleId]);
@@ -67,54 +62,45 @@ export const listUsersByVehicle = async (req, res, next) => {
   }
 };
 
-/**
- * Lista os veículos ativos de um usuário
- * GET /vehicle-users/user/:userId
- */
+
 export const listVehiclesByUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
     
-    // Pegamos o status da query string (ex: ?status=all)
     const { status } = req.query; 
 
-    // Montamos a condição de filtro dinamicamente
     let statusCondition = '';
     
-    // Se NÃO vier 'all', filtramos apenas os ativos (padrão antigo)
     if (status !== 'all') {
         statusCondition = 'AND v.veic_situacao = TRUE';
     }
-    // Se vier 'all', statusCondition fica vazio e traz tudo (ativos e inativos)
+  
 
     const query = `
-      SELECT
-        vu.veic_usu_id,
-        vu.data_inicial,
-        vu.data_final,
-        vu.ehproprietario,
-        v.veic_id,
-        v.veic_placa,
-        v.veic_ano,
-        v.veic_cor,
-        v.veic_combustivel,
-        v.veic_observ,
-        v.veic_situacao,
-        m.mod_nome,
-        ma.mar_nome,
-        cat.cat_id
-      FROM veiculo_usuario vu
-      JOIN veiculos v ON v.veic_id = vu.veic_id
-      JOIN modelos m ON v.mod_id = m.mod_id
-      JOIN marcas ma ON m.mar_id = ma.mar_id
-      JOIN categorias cat ON ma.cat_id = cat.cat_id
-      WHERE vu.usu_id = $1
-        AND vu.data_final IS NULL
-        ${statusCondition}  -- <--- INSERIMOS A CONDIÇÃO AQUI
+        SELECT vu.veic_usu_id,
+               vu.data_inicial,
+               vu.data_final,
+               vu.ehproprietario,
+               v.veic_id,
+               v.veic_placa,
+               v.veic_ano,
+               v.veic_cor,
+               v.veic_combustivel,
+               v.veic_observ,
+               v.veic_situacao,
+               m.mod_nome,
+               ma.mar_nome,
+               cat.cat_id
+          FROM veiculo_usuario AS vu
+          JOIN veiculos        AS v   ON v.veic_id = vu.veic_id
+          JOIN modelos         AS m   ON v.mod_id  = m.mod_id
+          JOIN marcas          AS ma  ON m.mar_id  = ma.mar_id
+          JOIN categorias      AS cat ON ma.cat_id = cat.cat_id
+         WHERE vu.usu_id = $1
+           AND vu.data_final IS NULL
+              ${statusCondition}
       ORDER BY v.veic_situacao DESC, v.veic_id DESC; 
     `;
-
-    // Dica: Adicionei ORDER BY para mostrar os ATIVOS primeiro
 
     const result = await pool.query(query, [userId]);
 
@@ -128,10 +114,7 @@ export const listVehiclesByUser = async (req, res, next) => {
   }
 };
 
-/**
- * Cria uma nova associação entre veículo e usuário
- * POST /vehicle-users
- */
+
 export const createVehicleUser = async (req, res, next) => {
   try {
     const { veic_id, usu_id, ehproprietario, data_inicial } = req.body;
@@ -160,12 +143,13 @@ export const createVehicleUser = async (req, res, next) => {
         }
     }
 
-    // --- VALIDAÇÃO DE DUPLICIDADE ATIVA ---
+    
     const checkQuery = `
-        SELECT veic_usu_id FROM veiculo_usuario 
-        WHERE veic_id = $1 
-          AND usu_id = $2 
-          AND data_final IS NULL
+        SELECT veic_usu_id 
+          FROM veiculo_usuario 
+         WHERE veic_id = $1 
+           AND usu_id = $2 
+           AND data_final IS NULL
     `;
     
     const checkResult = await pool.query(checkQuery, [veic_id, usu_id]);
@@ -201,16 +185,13 @@ export const createVehicleUser = async (req, res, next) => {
   }
 };
 
-/**
- * Atualiza dados da associação veículo-usuário (PATCH)
- * PATCH /vehicle-users/:id
- */
+
 export const updateVehicleUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { data_inicial, data_final, ehproprietario } = req.body;
 
-    // 1. BUSCAR O REGISTRO ATUAL
+    // BUSCAR O REGISTRO ATUAL
     const currentRecordResult = await pool.query(
       'SELECT data_inicial, data_final FROM veiculo_usuario WHERE veic_usu_id = $1',
       [id]
@@ -222,14 +203,12 @@ export const updateVehicleUser = async (req, res, next) => {
 
     const currentRecord = currentRecordResult.rows[0];
 
-    // 2. PREPARAR DADOS (Mescla novo com antigo)
+    // PREPARAR DADOS (Mescla novo com antigo)
     const nextDataInicial = data_inicial !== undefined ? data_inicial : currentRecord.data_inicial;
     const nextDataFinal = data_final !== undefined ? data_final : currentRecord.data_final;
 
     const today = new Date();
     today.setHours(23, 59, 59, 999); // Hoje vai até o último segundo
-
-    // 3. REGRAS DE NEGÓCIO
 
     // Validação A: Data Inicial no Futuro
     if (nextDataInicial && new Date(nextDataInicial) > today) {
@@ -248,7 +227,7 @@ export const updateVehicleUser = async (req, res, next) => {
         }
     }
 
-    // 4. MONTAGEM DINÂMICA
+  
     const fields = [];
     const values = [];
     let paramIndex = 1;
@@ -276,8 +255,8 @@ export const updateVehicleUser = async (req, res, next) => {
 
     const query = `
       UPDATE veiculo_usuario
-      SET ${fields.join(', ')}
-      WHERE veic_usu_id = $${paramIndex}
+         SET ${fields.join(', ')}
+       WHERE veic_usu_id = $${paramIndex}
       RETURNING *;
     `;
 
@@ -293,10 +272,7 @@ export const updateVehicleUser = async (req, res, next) => {
   }
 };
 
-/**
- * Remove a associação entre veículo e usuário
- * DELETE /vehicle-users/:id
- */
+
 export const deleteVehicleUser = async (req, res, next) => {
   try {
     const { id } = req.params;

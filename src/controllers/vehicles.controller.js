@@ -1,7 +1,5 @@
 import pool from '../config/db.js';
 
-// GET /vehicles
-// Lista todos os veículos com paginação e filtros
 export const listVehicles = async (req, res, next) => {
   try {
     const search = req.query.search || '';
@@ -58,27 +56,33 @@ export const listVehicles = async (req, res, next) => {
 
     // Query Principal
     const queryText = `
-      SELECT
-        v.veic_id,
-        mo.mod_nome AS modelo,
-        v.veic_placa,
-        v.veic_ano,
-        v.veic_cor,
-        v.veic_combustivel,
-        v.veic_observ,
-        v.veic_situacao,
-        m.mar_nome AS marca,
-        STRING_AGG(DISTINCT u.usu_nome, ', ') AS proprietarios,
-        COUNT(DISTINCT u.usu_id) AS num_proprietarios
-      FROM veiculos v
-      LEFT JOIN modelos mo ON v.mod_id = mo.mod_id
-      LEFT JOIN marcas m ON mo.mar_id = m.mar_id
-      LEFT JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id AND vu.data_final IS NULL
-      LEFT JOIN usuarios u ON vu.usu_id = u.usu_id
+         SELECT v.veic_id,
+                mo.mod_nome AS modelo,
+                v.veic_placa,
+                v.veic_ano,
+                v.veic_cor,
+                v.veic_combustivel,
+                v.veic_observ,
+                v.veic_situacao,
+                m.mar_nome AS marca,
+                STRING_AGG(DISTINCT u.usu_nome, ', ') AS proprietarios,
+                COUNT(DISTINCT u.usu_id) AS num_proprietarios
+           FROM veiculos v
+      LEFT JOIN modelos         AS mo ON v.mod_id  = mo.mod_id
+      LEFT JOIN marcas          AS m  ON mo.mar_id = m.mar_id
+      LEFT JOIN veiculo_usuario AS vu ON v.veic_id = vu.veic_id 
+                                      AND vu.data_final IS NULL
+      LEFT JOIN usuarios        AS u  ON vu.usu_id = u.usu_id
       ${whereClause}
-      GROUP BY
-        v.veic_id, mo.mod_nome, m.mar_nome, v.veic_placa,
-        v.veic_ano, v.veic_cor, v.veic_combustivel, v.veic_observ, v.veic_situacao
+       GROUP BY v.veic_id, 
+                mo.mod_nome, 
+                m.mar_nome, 
+                v.veic_placa,
+                v.veic_ano, 
+                v.veic_cor, 
+                v.veic_combustivel, 
+                v.veic_observ, 
+                v.veic_situacao
       ORDER BY ${safeOrderBy} ${safeOrderDirection}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -89,12 +93,13 @@ export const listVehicles = async (req, res, next) => {
 
     // Query de Contagem
     const countQuery = `
-      SELECT COUNT(DISTINCT v.veic_id) AS total
-      FROM veiculos v
-      LEFT JOIN modelos mo ON v.mod_id = mo.mod_id
-      LEFT JOIN marcas m ON mo.mar_id = m.mar_id
-      LEFT JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id AND vu.data_final IS NULL
-      LEFT JOIN usuarios u ON vu.usu_id = u.usu_id
+         SELECT COUNT(DISTINCT v.veic_id) AS total
+           FROM veiculos        AS v
+      LEFT JOIN modelos         AS mo ON v.mod_id  = mo.mod_id
+      LEFT JOIN marcas          AS m ON mo.mar_id  = m.mar_id
+      LEFT JOIN veiculo_usuario AS vu ON v.veic_id = vu.veic_id 
+                                      AND vu.data_final IS NULL
+      LEFT JOIN usuarios        AS u ON vu.usu_id  = u.usu_id
       ${whereClause}
     `;
 
@@ -115,8 +120,7 @@ export const listVehicles = async (req, res, next) => {
   }
 };
 
-// GET /vehicles/:id
-// Busca um veículo pelo ID
+
 export const getVehicleById = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -159,8 +163,7 @@ export const getVehicleById = async (req, res, next) => {
     }
 };
 
-// POST /vehicles
-// Cadastra um novo veículo
+
 export const createVehicle = async (req, res, next) => {
     try {
         const {
@@ -205,10 +208,8 @@ export const createVehicle = async (req, res, next) => {
     }
 };
 
-/**
- * Função genérica para atualização dinâmica (PATCH)
- * usada tanto pela rota do Usuário quanto do Admin
- */
+
+
 const updateVehicleDynamic = async (veic_id, updates, allowedFields) => {
     // 1. Validações Específicas antes de montar a query
     if (updates.veic_ano) {
@@ -251,8 +252,8 @@ const updateVehicleDynamic = async (veic_id, updates, allowedFields) => {
 
     const query = `
         UPDATE veiculos
-        SET ${fields.join(', ')}
-        WHERE veic_id = $${index}
+           SET ${fields.join(', ')}
+         WHERE veic_id = $${index}
         RETURNING *;
     `;
 
@@ -265,8 +266,7 @@ const updateVehicleDynamic = async (veic_id, updates, allowedFields) => {
     return result.rows[0];
 };
 
-// PATCH /vehicles/user/:veic_id
-// Edição simplificada (sem alterar situação)
+
 export const updateVehicleByUser = async (req, res, next) => {
     try {
         const { veic_id } = req.params;
@@ -284,8 +284,7 @@ export const updateVehicleByUser = async (req, res, next) => {
     }
 };
 
-// PATCH /vehicles/:veic_id
-// Edição completa (inclui situação)
+
 export const updateVehicleByAdmin = async (req, res, next) => {
     try {
         const { veic_id } = req.params;
@@ -303,8 +302,7 @@ export const updateVehicleByAdmin = async (req, res, next) => {
     }
 };
 
-// PATCH /vehicles/:veic_id/status
-// Ativa ou desativa um veículo 
+
 export const toggleVehicleStatus = async (req, res, next) => {
     try {
         const { veic_id } = req.params;
@@ -316,8 +314,8 @@ export const toggleVehicleStatus = async (req, res, next) => {
 
         const query = `
             UPDATE veiculos
-            SET veic_situacao = $1
-            WHERE veic_id = $2
+               SET veic_situacao = $1
+             WHERE veic_id = $2
             RETURNING *;
         `;
 
@@ -337,15 +335,14 @@ export const toggleVehicleStatus = async (req, res, next) => {
     }
 };
 
-// DELETE /vehicles/:id
-// Remove um veículo
 export const deleteVehicle = async (req, res, next) => {
     try {
         const { id } = req.params;
 
         const query = `
-            DELETE FROM veiculos
-            WHERE veic_id = $1
+            DELETE 
+              FROM veiculos
+             WHERE veic_id = $1
             RETURNING veic_id;
         `;
 
@@ -371,5 +368,3 @@ export const deleteVehicle = async (req, res, next) => {
     }
 };
 
-// NOTA: Removi a função 'updateVehicleStatus' pois ela era duplicada da 'toggleVehicleStatus'.
-// Use apenas toggleVehicleStatus nas rotas.

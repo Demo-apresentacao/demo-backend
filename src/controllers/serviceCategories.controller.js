@@ -1,14 +1,13 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as categorias de serviços
- * GET /service-categories
- */
+
 export const listServiceCategories = async (req, res, next) => {
     try {
         const query = `
-            SELECT cat_serv_id, cat_serv_nome, cat_serv_situacao 
-            FROM categorias_servicos 
+              SELECT cat_serv_id, 
+                     cat_serv_nome, 
+                     cat_serv_situacao 
+                FROM categorias_servicos 
             ORDER BY cat_serv_nome ASC
         `;
         
@@ -23,10 +22,7 @@ export const listServiceCategories = async (req, res, next) => {
     }
 };
 
-/**
- * Cadastra uma nova categoria de serviço
- * POST /service-categories
- */
+
 export const createServiceCategory = async (req, res, next) => {
     try {
         const { cat_serv_nome } = req.body;
@@ -47,16 +43,14 @@ export const createServiceCategory = async (req, res, next) => {
     }
 };
 
-/**
- * Atualiza uma categoria de serviço (PATCH Dinâmico)
- * PATCH /service-categories/:id
- */
+
+
 export const updateServiceCategory = async (req, res, next) => {
     try {
         const { id } = req.params;
         const updates = req.body;
 
-        // 1. Verifica se enviou algum dado
+        // Verifica se enviou algum dado
         if (Object.keys(updates).length === 0) {
             return res.status(400).json({
                 status: 'error',
@@ -64,7 +58,6 @@ export const updateServiceCategory = async (req, res, next) => {
             });
         }
 
-        // 2. Montagem Dinâmica da Query
         const fields = [];
         const values = [];
         let index = 1;
@@ -92,8 +85,8 @@ export const updateServiceCategory = async (req, res, next) => {
 
         const query = `
             UPDATE categorias_servicos 
-            SET ${fields.join(', ')} 
-            WHERE cat_serv_id = $${index} 
+               SET ${fields.join(', ')} 
+             WHERE cat_serv_id = $${index} 
             RETURNING *
         `;
 
@@ -109,17 +102,15 @@ export const updateServiceCategory = async (req, res, next) => {
     }
 };
 
-/**
- * Remove uma categoria de serviço
- * DELETE /service-categories/:id
- */
+
 export const deleteServiceCategory = async (req, res, next) => {
     try {
         const { id } = req.params;
 
         const query = `
-            DELETE FROM categorias_servicos
-            WHERE cat_serv_id = $1
+            DELETE 
+              FROM categorias_servicos
+             WHERE cat_serv_id = $1
             RETURNING cat_serv_id;
         `;
 

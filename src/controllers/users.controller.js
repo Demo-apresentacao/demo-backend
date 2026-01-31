@@ -34,19 +34,19 @@ function isValidPassword(password) {
 
 function getAgeError(dateString) {
   if (!dateString) return null;
-  const birthDate = new Date(dateString); 
+  const birthDate = new Date(dateString);
   const today = new Date();
-  
+
   if (isNaN(birthDate.getTime())) return "Data inválida.";
 
   const year = birthDate.getUTCFullYear();
-  
+
   if (year < 1900 || year > today.getFullYear()) {
     return "Ano de nascimento inválido.";
   }
 
   const ageDifMs = Date.now() - birthDate.getTime();
-  const ageDate = new Date(ageDifMs); 
+  const ageDate = new Date(ageDifMs);
   const age = Math.abs(ageDate.getUTCFullYear() - 1970);
 
   if (age < 18) {
@@ -55,22 +55,16 @@ function getAgeError(dateString) {
   return null;
 }
 
-// ====================================================
-// CONTROLLERS
-// ====================================================
 
-// ----------------------------------------------------
-//  GET LIST
-// ----------------------------------------------------
 export const listUsers = async (req, res, next) => {
   try {
-    const { 
-        search, 
-        page = 1, 
-        limit = 10, 
-        status, 
-        orderBy = 'usu_id', 
-        orderDirection = 'DESC'
+    const {
+      search,
+      page = 1,
+      limit = 10,
+      status,
+      orderBy = 'usu_id',
+      orderDirection = 'DESC'
     } = req.query;
 
     const offset = (page - 1) * limit;
@@ -79,9 +73,17 @@ export const listUsers = async (req, res, next) => {
     const safeOrderBy = sortableColumns.includes(orderBy) ? orderBy : 'usu_id';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    let queryText = `SELECT usu_id, usu_nome, usu_email, usu_telefone, usu_acesso, usu_situacao FROM usuarios`;
+    let queryText = `
+      SELECT usu_id, 
+             usu_nome, 
+             usu_email, 
+             usu_telefone, 
+             usu_acesso, 
+             usu_situacao 
+        FROM usuarios`;
+
     let countQuery = `SELECT COUNT(*) as total FROM usuarios`;
-    
+
     const conditions = [];
     const values = [];
     let paramIndex = 1;
@@ -110,9 +112,9 @@ export const listUsers = async (req, res, next) => {
     values.push(limit, offset);
 
     const result = await pool.query(queryText, values);
-    const countValues = values.slice(0, paramIndex - 1); 
+    const countValues = values.slice(0, paramIndex - 1);
     const countResult = await pool.query(countQuery, countValues);
-    
+
     const totalItems = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalItems / limit);
 
@@ -124,9 +126,8 @@ export const listUsers = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ----------------------------------------------------
-//  GET BY ID
-// ----------------------------------------------------
+
+
 export const getUserById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -142,9 +143,7 @@ export const getUserById = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ----------------------------------------------------
-//  CREATE USER
-// ----------------------------------------------------
+
 export const createUser = async (req, res, next) => {
   try {
     const {
@@ -159,19 +158,19 @@ export const createUser = async (req, res, next) => {
 
     if (!isValidCPF(usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
     if (!isValidEmail(usu_email)) return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
-    
+
     if (!isValidPassword(usu_senha)) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
+      return res.status(400).json({
+        status: 'error',
+        message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.'
       });
     }
 
     if (usu_data_nasc) {
-        const dateError = getAgeError(usu_data_nasc);
-        if (dateError) {
-             return res.status(400).json({ status: 'error', message: dateError });
-        }
+      const dateError = getAgeError(usu_data_nasc);
+      if (dateError) {
+        return res.status(400).json({ status: 'error', message: dateError });
+      }
     }
 
     // CRIPTOGRAFAR SENHA
@@ -187,37 +186,34 @@ export const createUser = async (req, res, next) => {
 
     const values = [
       usu_nome, usu_cpf, usu_data_nasc || null, usu_sexo ?? null, usu_telefone || null,
-      usu_email, usu_observ || null, usu_acesso ?? false, 
-      passwordHash, 
+      usu_email, usu_observ || null, usu_acesso ?? false,
+      passwordHash,
       usu_situacao ?? true
     ];
 
     const result = await pool.query(query, values);
-    
+
     // Remove a senha do retorno
     delete result.rows[0].usu_senha;
 
     return res.status(201).json({ status: 'success', message: 'Usuário criado com sucesso', data: result.rows[0] });
 
   } catch (error) {
-     const errorCode = error.code?.toString();
-     if (errorCode === '23505') {
-        if (error.constraint === 'uk_usuarios_cpf' || (error.detail && error.detail.includes('usu_cpf'))) {
-             return res.status(409).json({ status: 'error', message: 'Este CPF já possui cadastro no sistema.' });
-        }
-        if (error.constraint === 'uk_usuarios_email' || (error.detail && error.detail.includes('usu_email'))) {
-             return res.status(409).json({ status: 'error', message: 'Este e-mail já está em uso.' });
-        }
-        return res.status(409).json({ status: 'error', message: 'Dados duplicados.' });
-     }
-     next(error);
+    const errorCode = error.code?.toString();
+    if (errorCode === '23505') {
+      if (error.constraint === 'uk_usuarios_cpf' || (error.detail && error.detail.includes('usu_cpf'))) {
+        return res.status(409).json({ status: 'error', message: 'Este CPF já possui cadastro no sistema.' });
+      }
+      if (error.constraint === 'uk_usuarios_email' || (error.detail && error.detail.includes('usu_email'))) {
+        return res.status(409).json({ status: 'error', message: 'Este e-mail já está em uso.' });
+      }
+      return res.status(409).json({ status: 'error', message: 'Dados duplicados.' });
+    }
+    next(error);
   }
 };
 
 
-// ----------------------------------------------------
-//  UPDATE USER (PATCH Dinâmico e Seguro)
-// ----------------------------------------------------
 export const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -225,45 +221,43 @@ export const updateUser = async (req, res, next) => {
 
     // 1. Verifica se enviou algum dado
     if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
+      return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
     }
-
-    // --- VALIDAÇÕES CONDICIONAIS ---
 
     // Validação CPF
     if (updates.usu_cpf) {
-        if (!isValidCPF(updates.usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
-        const cpfLimpo = updates.usu_cpf.replace(/\D/g, '');
-        const cpfCheck = await pool.query(
-            `SELECT usu_id FROM usuarios WHERE REGEXP_REPLACE(usu_cpf, '\\D','','g') = $1 AND usu_id != $2`,
-            [cpfLimpo, id]
-        );
-        if (cpfCheck.rowCount > 0) return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
+      if (!isValidCPF(updates.usu_cpf)) return res.status(400).json({ status: 'error', message: 'CPF inválido.' });
+      const cpfLimpo = updates.usu_cpf.replace(/\D/g, '');
+      const cpfCheck = await pool.query(
+        `SELECT usu_id FROM usuarios WHERE REGEXP_REPLACE(usu_cpf, '\\D','','g') = $1 AND usu_id != $2`,
+        [cpfLimpo, id]
+      );
+      if (cpfCheck.rowCount > 0) return res.status(409).json({ status: 'error', message: 'CPF já pertence a outro usuário.' });
     }
 
     // Validação Email
     if (updates.usu_email && !isValidEmail(updates.usu_email)) {
-        return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
+      return res.status(400).json({ status: 'error', message: 'Formato de e-mail inválido.' });
     }
 
     // Validação Senha (Se vier senha, hasheia ela)
     if (updates.usu_senha) {
-        if (!isValidPassword(updates.usu_senha)) {
-            return res.status(400).json({ 
-                status: 'error', 
-                message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.' 
-            });
-        }
-        // Substitui a senha em texto plano pelo hash
-        updates.usu_senha = await hashPassword(updates.usu_senha);
+      if (!isValidPassword(updates.usu_senha)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'A senha deve ter no mínimo 12 caracteres, maiúscula, minúscula, número e especial.'
+        });
+      }
+      // Substitui a senha em texto plano pelo hash
+      updates.usu_senha = await hashPassword(updates.usu_senha);
     }
 
     // Validação Idade
     if (updates.usu_data_nasc) {
-        const dateError = getAgeError(updates.usu_data_nasc);
-        if (dateError) {
-             return res.status(400).json({ status: 'error', message: dateError });
-        }
+      const dateError = getAgeError(updates.usu_data_nasc);
+      if (dateError) {
+        return res.status(400).json({ status: 'error', message: dateError });
+      }
     }
 
     // --- MONTAGEM DINÂMICA DA QUERY ---
@@ -272,138 +266,134 @@ export const updateUser = async (req, res, next) => {
     let index = 1;
 
     const allowedFields = [
-        'usu_nome', 'usu_cpf', 'usu_data_nasc', 'usu_sexo', 
-        'usu_telefone', 'usu_email', 'usu_observ', 
-        'usu_acesso', 'usu_senha', 'usu_situacao'
+      'usu_nome', 'usu_cpf', 'usu_data_nasc', 'usu_sexo',
+      'usu_telefone', 'usu_email', 'usu_observ',
+      'usu_acesso', 'usu_senha', 'usu_situacao'
     ];
 
     for (const key in updates) {
-        if (allowedFields.includes(key)) {
-            fields.push(`${key} = $${index}`);
-            values.push(updates[key]);
-            index++;
-        }
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = $${index}`);
+        values.push(updates[key]);
+        index++;
+      }
     }
 
     if (fields.length === 0) {
-        return res.status(400).json({ status: 'error', message: 'Nenhum campo válido para atualização.' });
+      return res.status(400).json({ status: 'error', message: 'Nenhum campo válido para atualização.' });
     }
 
     values.push(id);
 
     const query = `
       UPDATE usuarios
-      SET ${fields.join(', ')}
-      WHERE usu_id = $${index}
-      RETURNING *;
+         SET ${fields.join(', ')}
+       WHERE usu_id = $${index}
+       RETURNING *;
     `;
 
     const result = await pool.query(query, values);
 
     if (result.rowCount === 0) {
-        return res.status(404).json({ status: 'error', message: "Usuário não encontrado" });
+      return res.status(404).json({ status: 'error', message: "Usuário não encontrado" });
     }
 
     // Remove a senha do retorno
     delete result.rows[0].usu_senha;
 
-    return res.json({ 
-        status: 'success', 
-        message: 'Usuário atualizado com sucesso',
-        data: result.rows[0]
+    return res.json({
+      status: 'success',
+      message: 'Usuário atualizado com sucesso',
+      data: result.rows[0]
     });
 
   } catch (error) {
-     if (error.code == '23505') {
-        if (error.detail && error.detail.includes('usu_cpf')) return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
-        return res.status(409).json({ status: 'error', message: 'E-mail ou CPF já em uso.' });
+    if (error.code == '23505') {
+      if (error.detail && error.detail.includes('usu_cpf')) return res.status(409).json({ status: 'error', message: 'Este CPF já pertence a outro usuário.' });
+      return res.status(409).json({ status: 'error', message: 'E-mail ou CPF já em uso.' });
     }
     next(error);
   }
 };
 
-// ----------------------------------------------------
-//  UPDATE USER STATUS (Atalho Útil)
-// ----------------------------------------------------
+
 export const updateUserStatus = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { usu_situacao } = req.body; 
+  try {
+    const { id } = req.params;
+    const { usu_situacao } = req.body;
 
-        if (usu_situacao === undefined) {
-             return res.status(400).json({ status: 'error', message: 'O campo usu_situacao é obrigatório.' });
-        }
+    if (usu_situacao === undefined) {
+      return res.status(400).json({ status: 'error', message: 'O campo usu_situacao é obrigatório.' });
+    }
 
-        const query = `
+    const query = `
             UPDATE usuarios 
-            SET usu_situacao = $1 
-            WHERE usu_id = $2
+               SET usu_situacao = $1 
+             WHERE usu_id = $2
             RETURNING usu_id, usu_nome, usu_situacao;
         `;
-        
-        const result = await pool.query(query, [usu_situacao, id]);
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'Usuário não encontrado.' });
-        }
+    const result = await pool.query(query, [usu_situacao, id]);
 
-        return res.json({ 
-            status: 'success', 
-            message: 'Status atualizado com sucesso.',
-            user: result.rows[0]
-        });
-
-    } catch (error) {
-        next(error);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
+
+    return res.json({
+      status: 'success',
+      message: 'Status atualizado com sucesso.',
+      user: result.rows[0]
+    });
+
+  } catch (error) {
+    next(error);
+  }
 };
 
-// ----------------------------------------------------
-//  DELETE USER
-// ----------------------------------------------------
+
 export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     // Verifica se existe
     const check = await pool.query('SELECT usu_id FROM usuarios WHERE usu_id = $1', [id]);
     if (check.rowCount === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
     await pool.query('DELETE FROM usuarios WHERE usu_id = $1;', [id]);
     return res.json({ status: 'success', message: 'Usuário removido com sucesso' });
-  } catch (error) { 
-      // Proteção contra erro de Chave Estrangeira (se o usuário tem carros ou agendamentos)
-      if (error.code === '23503') {
-          return res.status(409).json({ 
-              status: 'error', 
-              message: 'Não é possível excluir este usuário pois ele possui veículos ou agendamentos vinculados. Considere inativá-lo.' 
-          });
-      }
-      next(error); 
+  } catch (error) {
+    // Proteção contra erro de Chave Estrangeira (se o usuário tem carros ou agendamentos)
+    if (error.code === '23503') {
+      return res.status(409).json({
+        status: 'error',
+        message: 'Não é possível excluir este usuário pois ele possui veículos ou agendamentos vinculados. Considere inativá-lo.'
+      });
+    }
+    next(error);
   }
 };
 
-// ----------------------------------------------------
-//  GET VEHICLES BY USER
-// ----------------------------------------------------
+
 export const getUserVehicles = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        
-        // Adicionamos: AND vu.data_final IS NULL
-        const query = `
-            SELECT v.veic_id, v.veic_placa, m.mod_nome, vu.veic_usu_id
-            FROM veiculo_usuario vu
-            JOIN veiculos v ON vu.veic_id = v.veic_id
-            JOIN modelos m ON v.mod_id = m.mod_id
-            WHERE vu.usu_id = $1 
-              AND v.veic_situacao = true
-              AND vu.data_final IS NULL
+  try {
+    const { id } = req.params;
+
+    const query = `
+            SELECT v.veic_id, 
+                   v.veic_placa, 
+                   m.mod_nome, 
+                   vu.veic_usu_id
+              FROM veiculo_usuario AS vu
+              JOIN veiculos        AS v ON vu.veic_id = v.veic_id
+              JOIN modelos         AS m ON v.mod_id   = m.mod_id
+             WHERE vu.usu_id = $1 
+               AND v.veic_situacao = true
+               AND vu.data_final IS NULL
         `;
-        
-        const result = await pool.query(query, [id]);
-        return res.json({ status: 'success', data: result.rows });
-    } catch (error) {
-        next(error);
-    }
+
+    const result = await pool.query(query, [id]);
+    return res.json({ status: 'success', data: result.rows });
+  } catch (error) {
+    next(error);
+  }
 };

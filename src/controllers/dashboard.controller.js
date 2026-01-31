@@ -15,23 +15,34 @@ export const getDashboardStats = async (req, res, next) => {
             // 1º - Mostra quem está SENDO ATENDIDO AGORA (Status 2 - Em Execução)
             // 2º - Se ninguém estiver sendo atendido, mostra o PRÓXIMO PENDENTE (Status 1 - Agendado)
             const andamentoRes = await client.query(`
-                SELECT a.agend_id, a.agend_horario, a.agend_situacao, 
-                       v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone,
-                       STRING_AGG(s.serv_nome, ' + ') as lista_servicos
-                FROM agendamentos a
-                JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-                JOIN veiculos v ON vu.veic_id = v.veic_id
-                JOIN modelos m ON v.mod_id = m.mod_id
-                JOIN usuarios u ON vu.usu_id = u.usu_id
-                LEFT JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
-                LEFT JOIN servicos s ON ags.serv_id = s.serv_id
-                WHERE a.agend_data = $1 
-                  AND a.agend_situacao IN (1, 2) -- Pega Pendentes (1) e Em Execução (2)
-                GROUP BY a.agend_id, a.agend_horario, a.agend_situacao, v.veic_placa, m.mod_nome, u.usu_nome, u.usu_telefone
-                ORDER BY 
-                    CASE WHEN a.agend_situacao = 2 THEN 0 ELSE 1 END, -- Prioriza Status 2 (Em Execução)
-                    a.agend_horario ASC -- Desempata pelo horário
-                LIMIT 1
+                   SELECT a.agend_id, 
+                          a.agend_horario, 
+                          a.agend_situacao, 
+                          v.veic_placa, 
+                          m.mod_nome, 
+                          u.usu_nome, 
+                          u.usu_telefone,
+                          STRING_AGG(s.serv_nome, ' + ') as lista_servicos
+                     FROM agendamentos    AS a
+                     JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
+                     JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
+                     JOIN modelos         AS m   ON v.mod_id      = m.mod_id
+                     JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
+                LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
+                LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+                    WHERE a.agend_data = $1 
+                      AND a.agend_situacao IN (1, 2) 
+                 GROUP BY a.agend_id, 
+                          a.agend_horario, 
+                          a.agend_situacao, 
+                          v.veic_placa, 
+                          m.mod_nome, 
+                          u.usu_nome, 
+                          u.usu_telefone
+                 ORDER BY 
+                    CASE WHEN a.agend_situacao = 2 THEN 0 ELSE 1 END,
+                    a.agend_horario ASC 
+                  LIMIT 1
             `, [hoje]);
 
             const agendamentoAtual = andamentoRes.rows[0] || null;
@@ -49,57 +60,60 @@ export const getDashboardStats = async (req, res, next) => {
                 // Faz o caminho: Agendamento -> Veículo -> Categoria -> Tabela de Preço -> Preço
                 client.query(`
                     SELECT COALESCE(SUM(stv.stv_preco), 0) as total 
-                    FROM agendamentos a
-                    JOIN agenda_servicos ags ON a.agend_id = ags.agend_id
-                    
-                    JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-                    JOIN veiculos v ON vu.veic_id = v.veic_id
-                    JOIN modelos m ON v.mod_id = m.mod_id
-                    JOIN marcas ma ON m.mar_id = ma.mar_id
-                    JOIN categorias c ON ma.cat_id = c.cat_id
-                    
-                    JOIN servicos_tipo_veiculo stv 
-                         ON ags.serv_id = stv.serv_id 
-                         AND c.tps_id = stv.tps_id
-
-                    WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1 
-                      AND a.agend_situacao = 3
+                      FROM agendamentos AS a
+                      JOIN agenda_servicos       AS ags ON a.agend_id    = ags.agend_id
+                      JOIN veiculo_usuario       AS vu  ON a.veic_usu_id = vu.veic_usu_id
+                      JOIN veiculos              AS v   ON vu.veic_id    = v.veic_id
+                      JOIN modelos               AS m   ON v.mod_id      = m.mod_id
+                      JOIN marcas                AS ma  ON m.mar_id      = ma.mar_id
+                      JOIN categorias            AS c   ON ma.cat_id     = c.cat_id
+                      JOIN servicos_tipo_veiculo AS stv ON ags.serv_id   = stv.serv_id 
+                                                        AND c.tps_id     = stv.tps_id
+                     WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1 
+                       AND a.agend_situacao = 3
                 `, [mesAtual]),
 
                 // 4. Concluídos Mês
                 client.query(`
-                    SELECT COUNT(*) FROM agendamentos 
-                    WHERE TO_CHAR(agend_data, 'YYYY-MM') = $1 AND agend_situacao = 3
+                    SELECT COUNT(*) 
+                      FROM agendamentos 
+                     WHERE TO_CHAR(agend_data, 'YYYY-MM') = $1 AND agend_situacao = 3
                 `, [mesAtual]),
 
                 // 5. PRÓXIMAS ENTRADAS
                 client.query(`
-                    SELECT a.agend_horario, a.agend_situacao, v.veic_placa, m.mod_nome, u.usu_nome,
-                       (SELECT s.serv_nome FROM servicos s 
-                        JOIN agenda_servicos ags ON s.serv_id = ags.serv_id 
-                        WHERE ags.agend_id = a.agend_id LIMIT 1) as servico_principal
-                    FROM agendamentos a
-                    JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-                    JOIN veiculos v ON vu.veic_id = v.veic_id
-                    JOIN modelos m ON v.mod_id = m.mod_id
-                    JOIN usuarios u ON vu.usu_id = u.usu_id
-                    WHERE a.agend_data = $1 
-                      AND a.agend_situacao IN (1, 2)
-                      AND a.agend_id != $2  -- Ignora o ID que já está no destaque "Em andamento"
+                      SELECT a.agend_horario, 
+                             a.agend_situacao, 
+                             v.veic_placa, 
+                             m.mod_nome, 
+                             u.usu_nome,
+                             (SELECT s.serv_nome 
+                                FROM servicos AS s 
+                                JOIN agenda_servicos AS ags ON s.serv_id = ags.serv_id 
+                               WHERE ags.agend_id = a.agend_id LIMIT 1) as servico_principal
+                        FROM agendamentos    AS a
+                        JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+                        JOIN veiculos        AS v  ON vu.veic_id    = v.veic_id
+                        JOIN modelos         AS m  ON v.mod_id      = m.mod_id
+                        JOIN usuarios        AS u  ON vu.usu_id     = u.usu_id
+                       WHERE a.agend_data = $1 
+                         AND a.agend_situacao IN (1, 2)
+                         AND a.agend_id != $2  -- Ignora o ID que já está no destaque "Em andamento"
                     ORDER BY a.agend_horario ASC
-                    LIMIT 4
+                       LIMIT 4
                 `, [hoje, idEmAndamento]),
 
                 // 6. Gráfico (Top 5 Serviços)
                 client.query(`
-                    SELECT s.serv_nome, COUNT(*) as total
-                    FROM agenda_servicos ags
-                    JOIN servicos s ON ags.serv_id = s.serv_id
-                    JOIN agendamentos a ON ags.agend_id = a.agend_id
-                    WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1
+                      SELECT s.serv_nome, 
+                             COUNT(*) as total
+                        FROM agenda_servicos AS ags
+                        JOIN servicos AS s     ON ags.serv_id  = s.serv_id
+                        JOIN agendamentos AS a ON ags.agend_id = a.agend_id
+                       WHERE TO_CHAR(a.agend_data, 'YYYY-MM') = $1
                     GROUP BY s.serv_nome
                     ORDER BY total DESC
-                    LIMIT 5
+                       LIMIT 5
                 `, [mesAtual])
             ]);
 

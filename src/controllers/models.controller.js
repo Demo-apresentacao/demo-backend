@@ -1,19 +1,15 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todos os modelos
- * GET /models
- */
+
 export const getAllModels = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        mod_id,
-        mod_nome,
-        mod_cod,
-        mar_cod,
-        mar_id
-      FROM modelos
+        SELECT mod_id,
+               mod_nome,
+               mod_cod,
+               mar_cod,
+               mar_id
+          FROM modelos
       ORDER BY mod_nome ASC;
     `;
 
@@ -30,23 +26,19 @@ export const getAllModels = async (req, res, next) => {
   }
 };
 
-/**
- * Lista modelos por marca
- * GET /models/brand/:mar_id
- */
+
 export const getModelsByBrand = async (req, res, next) => {
   try {
     const { mar_id } = req.params;
 
     const query = `
-      SELECT
-        mod_id,
-        mod_nome,
-        mod_cod,
-        mar_cod,
-        mar_id
-      FROM modelos
-      WHERE mar_id = $1
+        SELECT mod_id,
+               mod_nome,
+               mod_cod,
+               mar_cod,
+               mar_id
+          FROM modelos
+         WHERE mar_id = $1
       ORDER BY mod_nome ASC;
     `;
 
@@ -63,25 +55,22 @@ export const getModelsByBrand = async (req, res, next) => {
   }
 };
 
-/**
- * Lista modelos por categoria e marca
- * GET /models/category/:cat_id/brand/:mar_id
- */
+
+
 export const getModelsByCategoryAndBrand = async (req, res, next) => {
   try {
     const { cat_id, mar_id } = req.params;
 
     const query = `
-      SELECT
-        m.mod_id,
-        m.mod_nome,
-        m.mod_cod,
-        m.mar_id
-      FROM modelos m
-      INNER JOIN marcas ma ON ma.mar_id = m.mar_id
-      WHERE ma.cat_id = $1
-        AND m.mar_id = $2
-      ORDER BY m.mod_nome ASC;
+          SELECT m.mod_id,
+                 m.mod_nome,
+                 m.mod_cod,
+                 m.mar_id
+            FROM modelos AS m
+      INNER JOIN marcas   AS ma ON ma.mar_id = m.mar_id
+           WHERE ma.cat_id = $1
+             AND m.mar_id = $2
+           ORDER BY m.mod_nome ASC;
     `;
 
     const result = await pool.query(query, [cat_id, mar_id]);
@@ -97,16 +86,14 @@ export const getModelsByCategoryAndBrand = async (req, res, next) => {
   }
 };
 
-/**
- * Cadastra um novo modelo
- * POST /models
- */
+
+
 export const createModel = async (req, res, next) => {
   try {
     const {
       mod_nome,
       mod_cod,
-      mar_cod, // Opcional, dependendo da sua regra de negócio
+      mar_cod,
       mar_id
     } = req.body;
 
@@ -145,16 +132,14 @@ export const createModel = async (req, res, next) => {
   }
 };
 
-/**
- * Atualiza um modelo (PATCH Dinâmico)
- * PATCH /models/:mod_id
- */
+
+
 export const updateModel = async (req, res, next) => {
   try {
     const { mod_id } = req.params;
     const updates = req.body;
 
-    // 1. Verifica se enviou algum dado
+    // Verifica se enviou algum dado
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         status: 'error',
@@ -162,7 +147,7 @@ export const updateModel = async (req, res, next) => {
       });
     }
 
-    // 2. Montagem Dinâmica da Query
+    
     const fields = [];
     const values = [];
     let index = 1;
@@ -188,8 +173,8 @@ export const updateModel = async (req, res, next) => {
 
     const query = `
       UPDATE modelos
-      SET ${fields.join(', ')}
-      WHERE mod_id = $${index}
+         SET ${fields.join(', ')}
+       WHERE mod_id = $${index}
       RETURNING *;
     `;
 
@@ -213,17 +198,15 @@ export const updateModel = async (req, res, next) => {
   }
 };
 
-/**
- * Exclui um modelo
- * DELETE /models/:mod_id
- */
+
 export const deleteModel = async (req, res, next) => {
   try {
     const { mod_id } = req.params;
 
     const query = `
-      DELETE FROM modelos
-      WHERE mod_id = $1
+      DELETE 
+        FROM modelos
+       WHERE mod_id = $1
       RETURNING mod_id;
     `;
 

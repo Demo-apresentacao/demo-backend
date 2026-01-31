@@ -1,20 +1,16 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as marcas
- * GET /brands
- */
+
 export const listBrands = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        mar_id,
-        mar_nome,
-        mar_cod,
-        mar_icone,
-        cat_id
-      FROM marcas
-      ORDER BY mar_nome ASC; -- Melhor ordenar por nome para listas
+        SELECT mar_id,
+               mar_nome,
+               mar_cod,
+               mar_icone,
+               cat_id
+          FROM marcas
+      ORDER BY mar_nome ASC; 
     `;
 
     const result = await pool.query(query);
@@ -29,23 +25,19 @@ export const listBrands = async (req, res, next) => {
   }
 };
 
-/**
- * Lista marcas por categoria
- * GET /brands/category/:cat_id
- */
+
 export const listBrandsByCategory = async (req, res, next) => {
   try {
     const { cat_id } = req.params;
 
     const query = `
-      SELECT
-        mar_id,
-        mar_nome,
-        mar_cod,
-        mar_icone,
-        cat_id
-      FROM marcas
-      WHERE cat_id = $1
+        SELECT mar_id,
+               mar_nome,
+               mar_cod,
+               mar_icone,
+               cat_id
+          FROM marcas
+         WHERE cat_id = $1
       ORDER BY mar_nome ASC;
     `;
 
@@ -61,10 +53,7 @@ export const listBrandsByCategory = async (req, res, next) => {
   }
 };
 
-/**
- * Cadastra uma nova marca
- * POST /brands
- */
+
 export const createBrand = async (req, res, next) => {
   try {
     const {
@@ -74,7 +63,7 @@ export const createBrand = async (req, res, next) => {
       cat_id
     } = req.body;
 
-    // Validação básica
+
     if (!mar_nome) {
         return res.status(400).json({ status: 'error', message: 'O nome da marca é obrigatório.' });
     }
@@ -109,16 +98,13 @@ export const createBrand = async (req, res, next) => {
   }
 };
 
-/**
- * Atualiza uma marca (PATCH Dinâmico)
- * PATCH /brands/:id
- */
+
 export const updateBrand = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
-    // 1. Verifica se enviou algum dado
+    // Verifica se enviou algum dado
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         status: 'error',
@@ -126,7 +112,7 @@ export const updateBrand = async (req, res, next) => {
       });
     }
 
-    // 2. Montagem Dinâmica da Query
+    
     const fields = [];
     const values = [];
     let index = 1;
@@ -152,8 +138,8 @@ export const updateBrand = async (req, res, next) => {
 
     const query = `
       UPDATE marcas
-      SET ${fields.join(', ')}
-      WHERE mar_id = $${index}
+         SET ${fields.join(', ')}
+       WHERE mar_id = $${index}
       RETURNING *;
     `;
 
@@ -176,17 +162,15 @@ export const updateBrand = async (req, res, next) => {
   }
 };
 
-/**
- * Remove uma marca
- * DELETE /brands/:id
- */
+
 export const deleteBrand = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const query = `
-      DELETE FROM marcas
-      WHERE mar_id = $1
+      DELETE
+        FROM marcas
+       WHERE mar_id = $1
       RETURNING mar_id;
     `;
 
@@ -204,7 +188,7 @@ export const deleteBrand = async (req, res, next) => {
       message: 'Marca removida com sucesso.'
     });
   } catch (error) {
-    // Tratamento de erro de chave estrangeira (Ex: tentar apagar Ford se existirem carros Ka ou Fiesta)
+    
     if (error.code === '23503') {
         return res.status(409).json({
             status: 'error',
@@ -213,4 +197,4 @@ export const deleteBrand = async (req, res, next) => {
     }
     next(error);
   }
-};
+}; 
