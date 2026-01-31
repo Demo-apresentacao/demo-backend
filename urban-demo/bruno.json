@@ -1,9 +1,0 @@
-{
-  "version": "1",
-  "name": "urban-demo",
-  "type": "collection",
-  "ignore": [
-    "node_modules",
-    ".git"
-  ]
-}
