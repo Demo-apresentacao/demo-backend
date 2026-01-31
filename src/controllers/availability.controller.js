@@ -1,20 +1,16 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as disponibilidades cadastradas
- * GET /availability
- */
+
 export const listAvailability = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        disp_id,
-        disp_dia,
-        disp_periodo,
-        disp_hr_ini,
-        disp_hr_fin,
-        disp_situacao
-      FROM disponibilidade
+        SELECT disp_id,
+               disp_dia,
+               disp_periodo,
+               disp_hr_ini,
+               disp_hr_fin,
+               disp_situacao
+          FROM disponibilidade
       ORDER BY disp_id;
     `;
 
@@ -29,10 +25,7 @@ export const listAvailability = async (req, res, next) => {
   }
 };
 
-/**
- * Cadastra uma nova disponibilidade
- * POST /availability
- */
+
 export const createAvailability = async (req, res, next) => {
   try {
     const {
@@ -83,10 +76,7 @@ export const createAvailability = async (req, res, next) => {
   }
 };
 
-/**
- * Edita os dados de uma disponibilidade (PATCH Dinâmico)
- * PATCH /availability/:disp_id
- */
+
 export const updateAvailability = async (req, res, next) => {
   try {
     const { disp_id } = req.params;
@@ -100,7 +90,6 @@ export const updateAvailability = async (req, res, next) => {
       });
     }
 
-    // 2. Montagem Dinâmica da Query
     const fields = [];
     const values = [];
     let index = 1;
@@ -126,7 +115,7 @@ export const updateAvailability = async (req, res, next) => {
 
     const query = `
       UPDATE disponibilidade
-      SET ${fields.join(', ')}
+         SET ${fields.join(', ')}
       WHERE disp_id = $${index}
       RETURNING *;
     `;
@@ -149,11 +138,8 @@ export const updateAvailability = async (req, res, next) => {
     next(error);
   }
 };
+ 
 
-/**
- * Habilita ou desabilita uma disponibilidade
- * PATCH /availability/status/:disp_id
- */
 export const toggleAvailabilityStatus = async (req, res, next) => {
   try {
     const { disp_id } = req.params;
@@ -166,8 +152,8 @@ export const toggleAvailabilityStatus = async (req, res, next) => {
 
     const query = `
       UPDATE disponibilidade
-      SET disp_situacao = $1
-      WHERE disp_id = $2
+         SET disp_situacao = $1
+       WHERE disp_id = $2
       RETURNING disp_id, disp_situacao;
     `;
 
@@ -187,17 +173,16 @@ export const toggleAvailabilityStatus = async (req, res, next) => {
   }
 };
 
-/**
- * Remove uma disponibilidade
- * DELETE /availability/:disp_id
- */
+
+
 export const deleteAvailability = async (req, res, next) => {
   try {
     const { disp_id } = req.params;
 
     const query = `
-      DELETE FROM disponibilidade
-      WHERE disp_id = $1
+      DELETE 
+        FROM disponibilidade
+       WHERE disp_id = $1
       RETURNING disp_id;
     `;
 

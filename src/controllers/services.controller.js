@@ -1,142 +1,91 @@
 import pool from '../config/db.js';
 
-/* =========================================================
-   GET /services
-/* =========================================================
-   GET /services
-========================================================= */
 export const listServices = async (req, res, next) => {
   try {
     const {
       search,
       page = 1,
-      limit = 1000,
-      status = 'active',
+      limit = 10,
+      status = 'all',
       orderBy = 'cat_serv_nome',
       orderDirection = 'ASC',
-      vehicleType // <--- 1. FALTAVA PEGAR ISSO AQUI
+      vehicleType = 'all',
+      category = 'all'
     } = req.query;
-
-    console.log("FILTROS RECEBIDOS:", req.query);
 
     const offset = (page - 1) * limit;
 
-    // --- LÓGICA DE ORDENAÇÃO ---
-    const sortableColumns = ['serv_id', 'serv_nome', 'stv_preco', 'stv_duracao', 'serv_situacao', 'cat_serv_nome'];
-    const safeColumn = sortableColumns.includes(orderBy) ? orderBy : 'cat_serv_nome';
-    const safeDirection = orderDirection.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    const sortableColumns = [
+      'serv_id',
+      'serv_nome',
+      'cat_serv_nome',
+      'serv_situacao'
+    ];
 
-    let orderByClause = '';
+    const safeColumn = sortableColumns.includes(orderBy)
+      ? orderBy
+      : 'cat_serv_nome';
 
-    if (safeColumn === 'cat_serv_nome') {
-      orderByClause = `ORDER BY cs.cat_serv_nome ${safeDirection}, s.serv_nome ASC`;
-    } else {
-      orderByClause = `ORDER BY s.${safeColumn} ${safeDirection}`;
-    }
+    const safeDirection =
+      orderDirection?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    // --- MONTAGEM DA QUERY PRINCIPAL ---
-    let queryText = `
-          SELECT s.serv_id, 
-                 s.cat_serv_id, 
-                 cs.cat_serv_nome, 
-                 s.serv_nome,
-                 s.serv_descricao,
-                 s.serv_situacao,
-                 stv.stv_preco,
-                 stv.stv_duracao,
-                 tvs.tps_nome
-            FROM servicos              AS s
-       LEFT JOIN categorias_servicos   AS cs  ON s.cat_serv_id = cs.cat_serv_id
-       LEFT JOIN servicos_tipo_veiculo AS stv ON s.serv_id     = stv.serv_id
-       LEFT JOIN tipo_veiculo_servico  AS tvs ON stv.tps_id    = tvs.tps_id
-    `;
+    const orderByClause =
+      safeColumn === 'cat_serv_nome'
+        ? `ORDER BY cs.cat_serv_nome ${safeDirection}, s.serv_nome ASC`
+        : `ORDER BY s.${safeColumn} ${safeDirection}`;
 
-    // --- 2. FALTAVA OS JOINS NA QUERY DE CONTAGEM ---
-    // Se não tiver os joins aqui, quando tentarmos filtrar "WHERE tvs.tps_id = ...", o count vai dar erro de SQL
-    let countQuery = `
-         SELECT COUNT(*) AS total 
+    const baseQuery = `
            FROM servicos AS s
-      LEFT JOIN categorias_servicos   AS cs  ON s.cat_serv_id = cs.cat_serv_id
-      LEFT JOIN servicos_tipo_veiculo AS stv ON s.serv_id     = stv.serv_id
-      LEFT JOIN tipo_veiculo_servico  AS tvs ON stv.tps_id    = tvs.tps_id
+      LEFT JOIN categorias_servicos   AS cs  ON cs.cat_serv_id = s.cat_serv_id
+      LEFT JOIN servicos_tipo_veiculo AS stv ON stv.serv_id    = s.serv_id
+      LEFT JOIN tipo_veiculo_servico  AS tvs ON tvs.tps_id     = stv.tps_id
     `;
 
     const conditions = [];
     const values = [];
     let paramIndex = 1;
 
-    // Filtro de Busca
     if (search) {
-      conditions.push(`(s.serv_nome ILIKE $${paramIndex} OR s.serv_descricao ILIKE $${paramIndex})`);
+      conditions.push(`
+        (s.serv_nome ILIKE $${paramIndex}
+         OR s.serv_descricao ILIKE $${paramIndex})
+      `);
       values.push(`%${search}%`);
       paramIndex++;
     }
 
-    // Filtro de Status
-    if (status && status !== 'all') {
-      const statusBool = status === 'active';
+    if (status !== 'all') {
       conditions.push(`s.serv_situacao = $${paramIndex}`);
-      values.push(statusBool);
+      values.push(status === 'active');
       paramIndex++;
     }
 
-    // --- 3. FALTAVA A LÓGICA DO FILTRO DE VEÍCULO ---
-    if (vehicleType && vehicleType !== 'all') {
-      // Filtra pela coluna tps_id da tabela tvs (tipo_veiculo_servico)
+    if (category !== 'all') {
+      conditions.push(`s.cat_serv_id = $${paramIndex}`);
+      values.push(category);
+      paramIndex++;
+    }
+
+    if (vehicleType !== 'all') {
       conditions.push(`tvs.tps_id = $${paramIndex}`);
       values.push(vehicleType);
       paramIndex++;
     }
 
-    // Aplica WHERE (Serve para a query principal e para o count)
-    if (conditions.length > 0) {
-      const whereClause = ` WHERE ` + conditions.join(' AND ');
-      queryText += whereClause;
-      countQuery += whereClause;
-    }
+    const whereClause =
+      conditions.length > 0
+        ? `WHERE ${conditions.join(' AND ')}`
+        : '';
 
-    // Aplica ORDER BY e Paginação (Apenas na query principal)
-    queryText += ` ${orderByClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    values.push(limit, offset);
-
-    // Executa Principal
-    const result = await pool.query(queryText, values);
-
-    // Executa Count (remove limit e offset dos values)
-    const countValues = values.slice(0, paramIndex - 1);
-    const countResult = await pool.query(countQuery, countValues);
-
-    const totalItems = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(totalItems / limit);
-
-    return res.status(200).json({
-      status: 'success',
-      data: result.rows,
-      meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
-    });
-
-  } catch (error) {
-    next(error);
-  }
-};
-/* =========================================================
-   GET /services/:serv_id
-========================================================= */
-export const getServiceById = async (req, res, next) => {
-  try {
-    // Note: mudei para 'id' ou 'serv_id' dependendo de como está sua rota
-    // Se a rota for /services/:id, use req.params.id
-    const { serv_id } = req.params;
-
-    const result = await pool.query(
-      `
-      SELECT 
+    const dataQuery = `
+      SELECT
         s.serv_id,
         s.serv_nome,
         s.serv_descricao,
-        s.cat_serv_id,
         s.serv_situacao,
-        
+        s.cat_serv_id,
+        cs.cat_serv_nome,
+
         COALESCE(
           json_agg(
             json_build_object(
@@ -145,14 +94,89 @@ export const getServiceById = async (req, res, next) => {
               'preco', stv.stv_preco,
               'duracao', stv.stv_duracao
             )
-          ) FILTER (WHERE tvs.tps_id IS NOT NULL), 
+          ) FILTER (WHERE tvs.tps_id IS NOT NULL),
           '[]'
-        ) AS precos
-      FROM servicos AS s
+        ) AS categorias
+
+      ${baseQuery}
+      ${whereClause}
+
+      GROUP BY
+        s.serv_id,
+        s.serv_nome,
+        s.serv_descricao,
+        s.serv_situacao,
+        s.cat_serv_id,
+        cs.cat_serv_nome
+
+      ${orderByClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const dataValues = [...values, limit, offset];
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT s.serv_id) AS total
+      ${baseQuery}
+      ${whereClause}
+    `;
+
+    const [dataResult, countResult] = await Promise.all([
+      pool.query(dataQuery, dataValues),
+      pool.query(countQuery, values)
+    ]);
+
+    const totalItems = Number(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return res.json({
+      status: 'success',
+      data: dataResult.rows,
+      meta: {
+        totalItems,
+        totalPages,
+        currentPage: Number(page),
+        itemsPerPage: Number(limit)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+export const getServiceById = async (req, res, next) => {
+  try {
+    const { serv_id } = req.params;
+
+    const result = await pool.query(
+      `
+         SELECT s.serv_id,
+                s.serv_nome,
+                s.serv_descricao,
+                s.cat_serv_id,
+                s.serv_situacao,
+        
+                COALESCE(
+                  json_agg(
+                    json_build_object(
+                      'tps_id', tvs.tps_id,
+                      'tps_nome', tvs.tps_nome,
+                      'preco', stv.stv_preco,
+                      'duracao', stv.stv_duracao
+                   )
+                  ) FILTER (WHERE tvs.tps_id IS NOT NULL), 
+                    '[]'
+                ) AS precos
+           FROM servicos AS s
       LEFT JOIN servicos_tipo_veiculo AS stv ON stv.serv_id = s.serv_id
-      LEFT JOIN tipo_veiculo_servico AS tvs ON tvs.tps_id = stv.tps_id
-      WHERE s.serv_id = $1
-      GROUP BY s.serv_id, s.serv_nome, s.serv_descricao, s.cat_serv_id, s.serv_situacao
+      LEFT JOIN tipo_veiculo_servico  AS tvs ON tvs.tps_id  = stv.tps_id
+          WHERE s.serv_id = $1
+       GROUP BY s.serv_id,
+                s.serv_nome, 
+                s.serv_descricao, 
+                s.cat_serv_id, 
+                s.serv_situacao
       `,
       [serv_id]
     );
@@ -175,9 +199,7 @@ export const getServiceById = async (req, res, next) => {
   }
 };
 
-/* =========================================================
-   POST /services
-========================================================= */
+
 export const createService = async (req, res, next) => {
   const client = await pool.connect();
 
@@ -208,7 +230,7 @@ export const createService = async (req, res, next) => {
       await client.query(
         `INSERT INTO servicos_tipo_veiculo (serv_id, tps_id, stv_preco, stv_duracao)
      VALUES ($1, $2, $3, $4)`,
-        [serv_id, p.tps_id, p.preco, p.duracao] // Use p.tps_id aqui
+        [serv_id, p.tps_id, p.preco, p.duracao] 
       );
     }
 
@@ -225,10 +247,6 @@ export const createService = async (req, res, next) => {
 
 
 
-/* =========================================================
-   PATCH /services/:serv_id
-   UPDATE COMPLETO (SERVIÇO + PREÇOS)
-========================================================= */
 export const updateService = async (req, res, next) => {
   const client = await pool.connect();
 
@@ -292,9 +310,7 @@ export const updateService = async (req, res, next) => {
   }
 };
 
-/* =========================================================
-   PATCH /services/:serv_id/status
-========================================================= */
+
 export const toggleServiceStatus = async (req, res, next) => {
   try {
     const { serv_id } = req.params;
@@ -317,6 +333,7 @@ export const toggleServiceStatus = async (req, res, next) => {
   }
 };
 
+
 export const getServicesByVehicle = async (req, res, next) => {
     try {
         const { veic_usu_id } = req.params;
@@ -326,28 +343,27 @@ export const getServicesByVehicle = async (req, res, next) => {
         }
 
         const query = `
-            SELECT 
-                s.serv_id, 
-                s.serv_nome, 
-                s.serv_descricao,
-                stv.stv_preco as serv_preco, 
-                stv.stv_duracao,
-                cs.cat_serv_nome,
-                tvs.tps_nome as categoria_cobranca -- Apenas para debug/conferência
-            FROM veiculo_usuario vu
-            JOIN veiculos v ON vu.veic_id = v.veic_id
-            JOIN modelos m ON v.mod_id = m.mod_id
-            JOIN marcas ma ON m.mar_id = ma.mar_id
-            JOIN categorias c ON ma.cat_id = c.cat_id
-            JOIN servicos_tipo_veiculo stv ON c.tps_id = stv.tps_id 
-            JOIN tipo_veiculo_servico tvs ON stv.tps_id = tvs.tps_id
-            JOIN servicos s ON stv.serv_id = s.serv_id
-            LEFT JOIN categorias_servicos cs ON s.cat_serv_id = cs.cat_serv_id
-            
-            WHERE vu.veic_usu_id = $1
-              AND s.serv_situacao = true
-              AND stv.stv_situacao = true
-            ORDER BY cs.cat_serv_nome ASC, s.serv_nome ASC;
+               SELECT s.serv_id, 
+                      s.serv_nome, 
+                      s.serv_descricao,
+                      stv.stv_preco as serv_preco, 
+                      stv.stv_duracao,
+                      cs.cat_serv_nome,
+                      tvs.tps_nome as categoria_cobranca 
+                 FROM veiculo_usuario       AS vu
+                 JOIN veiculos              AS v   ON vu.veic_id    = v.veic_id
+                 JOIN modelos               AS m   ON v.mod_id      = m.mod_id
+                 JOIN marcas                AS ma  ON m.mar_id      = ma.mar_id
+                 JOIN categorias            AS c   ON ma.cat_id     = c.cat_id
+                 JOIN servicos_tipo_veiculo AS stv ON c.tps_id      = stv.tps_id 
+                 JOIN tipo_veiculo_servico  AS tvs ON stv.tps_id    = tvs.tps_id
+                 JOIN servicos              AS s   ON stv.serv_id   = s.serv_id
+            LEFT JOIN categorias_servicos   AS cs  ON s.cat_serv_id = cs.cat_serv_id
+                WHERE vu.veic_usu_id = $1
+                  AND s.serv_situacao = true
+                  AND stv.stv_situacao = true
+             ORDER BY cs.cat_serv_nome ASC, 
+                      s.serv_nome ASC;
         `;
 
         const result = await pool.query(query, [veic_usu_id]);
@@ -358,15 +374,12 @@ export const getServicesByVehicle = async (req, res, next) => {
         });
 
     } catch (error) {
-        // Isso vai ajudar a ver o erro real no console do backend se acontecer de novo
         console.error("Erro SQL Detalhado:", error);
         next(error);
     }
 };
 
-/* =========================================================
-   DELETE /services/:serv_id
-========================================================= */
+
 export const deleteService = async (req, res, next) => {
   const client = await pool.connect();
 

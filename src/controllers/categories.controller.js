@@ -1,18 +1,14 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as categorias
- * GET /categories
- */
+
 export const listCategories = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        cat_id,
-        cat_nome,
-        cat_icone
-      FROM categorias
-      ORDER BY cat_nome ASC; -- Ordenar por nome facilita a busca visual
+        SELECT cat_id,
+               cat_nome,
+               cat_icone
+          FROM categorias
+      ORDER BY cat_nome ASC;
     `;
 
     const result = await pool.query(query);
@@ -27,10 +23,7 @@ export const listCategories = async (req, res, next) => {
   }
 };
 
-/**
- * Cadastra uma nova categoria
- * POST /categories
- */
+
 export const createCategory = async (req, res, next) => {
   try {
     const { cat_nome, cat_icone } = req.body;
@@ -59,16 +52,14 @@ export const createCategory = async (req, res, next) => {
   }
 };
 
-/**
- * Atualiza uma categoria (PATCH Dinâmico)
- * PATCH /categories/:id
- */
+
+
 export const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
-    // 1. Verifica se enviou algum dado
+    // Verifica se enviou algum dado
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         status: 'error',
@@ -76,7 +67,7 @@ export const updateCategory = async (req, res, next) => {
       });
     }
 
-    // 2. Montagem Dinâmica da Query
+    
     const fields = [];
     const values = [];
     let index = 1;
@@ -102,8 +93,8 @@ export const updateCategory = async (req, res, next) => {
 
     const query = `
       UPDATE categorias
-      SET ${fields.join(', ')}
-      WHERE cat_id = $${index}
+         SET ${fields.join(', ')}
+       WHERE cat_id = $${index}
       RETURNING *;
     `;
 
@@ -126,17 +117,15 @@ export const updateCategory = async (req, res, next) => {
   }
 };
 
-/**
- * Remove uma categoria
- * DELETE /categories/:id
- */
+
 export const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const query = `
-      DELETE FROM categorias
-      WHERE cat_id = $1
+      DELETE 
+        FROM categorias
+       WHERE cat_id = $1
       RETURNING cat_id;
     `;
 
@@ -154,7 +143,7 @@ export const deleteCategory = async (req, res, next) => {
       message: 'Categoria removida com sucesso.'
     });
   } catch (error) {
-    // Tratamento de Foreign Key (Se existirem marcas/produtos vinculados a essa categoria)
+    
     if (error.code === '23503') {
         return res.status(409).json({
             status: 'error',

@@ -14,6 +14,10 @@ const options = {
         url: 'http://localhost:3001',
         description: 'Servidor Local',
       },
+      {
+        url: 'http://localhost:3000',
+        description: 'Servidor',
+      },
         {
         url: 'https://urban-backend-4b5e.onrender.com',
         description: 'Servidor de Produção (Render)',
@@ -30,7 +34,7 @@ const options = {
     },
   },
 
-  // 🔥 CAMINHO ABSOLUTO (resolve 100% dos casos)
+
   apis: [path.join(process.cwd(), 'src/routes/**/*.js')],
 };
 

@@ -1,7 +1,7 @@
 import pool from '../config/db.js';
 import { randomUUID } from 'crypto';
 
-// --- FUNÇÕES AUXILIARES (HELPERS) ---
+
 
 // Converte string "HH:MM:SS" para minutos totais (ex: "01:30" -> 90)
 const timeToMinutes = (timeStr) => {
@@ -28,7 +28,6 @@ const isOverlapping = (startA, endA, startB, endB) => {
     return (startA < endB) && (endA > startB);
 };
 
-// --- FUNÇÃO PRINCIPAL DE VALIDAÇÃO (CORRIGIDA) ---
 // Agora recebe veicUsuId para buscar a duração correta da categoria do carro
 const verificarConflito = async (client, agendData, agendHorario, serviceIds, veicUsuId, excludeAgendId = null) => {
     
@@ -36,22 +35,20 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ve
     let totalDurationMinutes = 0;
 
     if (serviceIds && serviceIds.length > 0) {
-        // QUERY CORRIGIDA: Busca a duração na tabela servicos_tipo_veiculo
-        // baseada na categoria do veículo selecionado
+        
         const durationQuery = `
             SELECT stv.stv_duracao
-            FROM servicos_tipo_veiculo stv
-            JOIN servicos s ON stv.serv_id = s.serv_id
-            -- Joins para chegar do Veículo do Usuário até a Categoria/Tipo de Preço
-            JOIN categorias c ON stv.tps_id = c.tps_id
-            JOIN marcas ma ON c.cat_id = ma.cat_id
-            JOIN modelos m ON ma.mar_id = m.mar_id
-            JOIN veiculos v ON m.mod_id = v.mod_id
-            JOIN veiculo_usuario vu ON v.veic_id = vu.veic_id
+              FROM servicos_tipo_veiculo AS stv
+              JOIN servicos        AS s  ON stv.serv_id = s.serv_id
+              JOIN categorias      AS c  ON stv.tps_id  = c.tps_id
+              JOIN marcas          AS ma ON c.cat_id    = ma.cat_id
+              JOIN modelos         AS m  ON ma.mar_id   = m.mar_id
+              JOIN veiculos        AS v  ON m.mod_id    = v.mod_id
+              JOIN veiculo_usuario AS vu ON v.veic_id   = vu.veic_id
             
-            WHERE vu.veic_usu_id = $1  -- O veículo sendo agendado
-              AND stv.serv_id = ANY($2::int[]) -- Os serviços selecionados
-              AND stv.stv_situacao = true
+             WHERE vu.veic_usu_id = $1  -- O veículo sendo agendado
+               AND stv.serv_id = ANY($2::int[]) -- Os serviços selecionados
+               AND stv.stv_situacao = true
         `;
         
         const resServices = await client.query(durationQuery, [veicUsuId, serviceIds]);
@@ -94,8 +91,6 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ve
              a.agend_id, 
              a.agend_horario, 
              v.veic_placa,
-             -- Soma a duração dos serviços daquele agendamento específico
-             -- Precisamos fazer o join completo de novo para garantir a duração correta da categoria
              SUM(EXTRACT(EPOCH FROM stv.stv_duracao)/60) as duracao_total_min
         FROM agendamentos     AS a
         JOIN veiculo_usuario  AS vu ON a.veic_usu_id = vu.veic_usu_id
@@ -106,7 +101,7 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ve
         
         LEFT JOIN agenda_servicos AS ags ON a.agend_id = ags.agend_id
         LEFT JOIN servicos_tipo_veiculo AS stv 
-             ON ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id -- Match Serviço + Categoria do Carro
+             ON ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id 
              
         WHERE a.agend_data = $1 
           AND a.agend_situacao != 0 
@@ -197,15 +192,24 @@ export const listAppointments = async (req, res, next) => {
         const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 
         let queryText = `
-          SELECT 
-            a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao,
-            a.tracking_token,
-            v.veic_placa, u.usu_nome,
-            STRING_AGG(s.serv_nome, ', ') AS lista_servicos
+          SELECT a.agend_id, 
+                 a.agend_data,
+                 a.agend_horario, 
+                 a.agend_situacao,
+                 a.tracking_token,
+                 v.veic_placa, 
+                 u.usu_nome,
+                 STRING_AGG(s.serv_nome, ', ') AS lista_servicos
           ${baseQuery}
           ${whereClause}
-          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, a.tracking_token, v.veic_placa, u.usu_nome 
-        `;
+          GROUP BY a.agend_id, 
+                   a.agend_data, 
+                   a.agend_horario, 
+                   a.agend_situacao, 
+                   a.tracking_token, 
+                   v.veic_placa, 
+                   u.usu_nome 
+`;
 
         let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
 
@@ -263,10 +267,10 @@ export const getAppointmentById = async (req, res, next) => {
                s.serv_id, 
                s.serv_nome, 
                sit.agend_serv_situ_nome
-        FROM   agenda_servicos ags
-        JOIN   servicos AS s ON ags.serv_id = s.serv_id
-        JOIN   agenda_servicos_situacao sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
-        WHERE  ags.agend_id = $1
+          FROM agenda_servicos AS ags
+          JOIN servicos        AS s ON ags.serv_id = s.serv_id
+          JOIN agenda_servicos_situacao AS sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
+         WHERE  ags.agend_id = $1
         `;
         const resultServices = await pool.query(queryServices, [id]);
 
@@ -280,7 +284,7 @@ export const getAppointmentById = async (req, res, next) => {
     }
 };
 
-// POST /appointments
+
 export const createAppointment = async (req, res, next) => {
     const client = await pool.connect();
     try {
@@ -346,9 +350,7 @@ export const createAppointment = async (req, res, next) => {
     }
 };
 
-/**
- * Atualiza um agendamento (PATCH Dinâmico)
- */
+
 export const updateAppointment = async (req, res, next) => {
     const client = await pool.connect();
     try {
@@ -405,8 +407,8 @@ export const updateAppointment = async (req, res, next) => {
             values.push(id);
             const updateQuery = `
                 UPDATE agendamentos
-                SET ${fields.join(', ')}
-                WHERE agend_id = $${index}
+                   SET ${fields.join(', ')}
+                 WHERE agend_id = $${index}
                 RETURNING *
             `;
             await client.query(updateQuery, values);
@@ -443,7 +445,8 @@ export const updateAppointment = async (req, res, next) => {
     }
 };
 
-// PATCH /appointments/:id/cancel
+
+
 export const cancelAppointment = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -460,25 +463,24 @@ export const cancelAppointment = async (req, res, next) => {
     }
 };
 
-// GET /public/status/:token
+
 export const getPublicAppointmentStatus = async (req, res, next) => {
     try {
         const { token } = req.params;
 
         const query = `
-            SELECT 
-                a.agend_data, 
-                a.agend_horario, 
-                a.agend_situacao,
-                m.mod_nome, 
-                ma.mar_nome, 
-                v.veic_placa 
-            FROM agendamentos a
-            JOIN veiculo_usuario vu ON a.veic_usu_id = vu.veic_usu_id
-            JOIN veiculos v ON vu.veic_id = v.veic_id
-            JOIN modelos m ON v.mod_id = m.mod_id
-            JOIN marcas ma ON m.mar_id = ma.mar_id
-            WHERE a.tracking_token = $1
+            SELECT a.agend_data, 
+                   a.agend_horario, 
+                   a.agend_situacao,
+                   m.mod_nome, 
+                   ma.mar_nome, 
+                   v.veic_placa 
+              FROM agendamentos    AS a
+              JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+              JOIN veiculos        AS v  ON vu.veic_id    = v.veic_id
+              JOIN modelos         AS m  ON v.mod_id      = m.mod_id
+              JOIN marcas          AS ma ON m.mar_id      = ma.mar_id
+             WHERE a.tracking_token = $1
         `;
 
         const result = await pool.query(query, [token]);

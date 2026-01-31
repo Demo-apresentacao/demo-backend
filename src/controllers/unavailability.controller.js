@@ -1,18 +1,14 @@
 import pool from '../config/db.js';
 
-/**
- * Lista todas as indisponibilidades cadastradas
- * GET /unavailability
- */
+
 export const listUnavailability = async (req, res, next) => {
   try {
     const query = `
-      SELECT
-        indisp_id,
-        indisp_data,
-        indisp_situacao
-      FROM indisponibilidade
-      ORDER BY indisp_data ASC; -- Ordenar por data faz mais sentido para agenda
+        SELECT indisp_id,
+               indisp_data,
+               indisp_situacao
+          FROM indisponibilidade
+      ORDER BY indisp_data ASC; 
     `;
 
     const result = await pool.query(query);
@@ -27,10 +23,8 @@ export const listUnavailability = async (req, res, next) => {
   }
 };
 
-/**
- * Cadastra uma nova indisponibilidade
- * POST /unavailability
- */
+
+
 export const createUnavailability = async (req, res, next) => {
   try {
     const { indisp_data, indisp_situacao = true } = req.body;
@@ -62,21 +56,17 @@ export const createUnavailability = async (req, res, next) => {
   }
 };
 
-/**
- * Edita uma indisponibilidade (PATCH Dinâmico)
- * PATCH /unavailability/:indisp_id
- */
+
 export const updateUnavailability = async (req, res, next) => {
   try {
     const { indisp_id } = req.params;
     const updates = req.body;
 
-    // 1. Verifica se enviou algum dado
+    // Verifica se enviou algum dado
     if (Object.keys(updates).length === 0) {
         return res.status(400).json({ status: 'error', message: 'Nenhum campo fornecido para atualização.' });
     }
 
-    // 2. Montagem Dinâmica da Query
     const fields = [];
     const values = [];
     let index = 1;
@@ -99,8 +89,8 @@ export const updateUnavailability = async (req, res, next) => {
 
     const query = `
       UPDATE indisponibilidade
-      SET ${fields.join(', ')}
-      WHERE indisp_id = $${index}
+         SET ${fields.join(', ')}
+       WHERE indisp_id = $${index}
       RETURNING *;
     `;
 
@@ -120,10 +110,8 @@ export const updateUnavailability = async (req, res, next) => {
   }
 };
 
-/**
- * Ativa ou desativa uma indisponibilidade (Atalho)
- * PATCH /unavailability/status/:indisp_id
- */
+
+
 export const toggleUnavailabilityStatus = async (req, res, next) => {
   try {
     const { indisp_id } = req.params;
@@ -135,8 +123,8 @@ export const toggleUnavailabilityStatus = async (req, res, next) => {
 
     const query = `
       UPDATE indisponibilidade
-      SET indisp_situacao = $1
-      WHERE indisp_id = $2
+         SET indisp_situacao = $1
+       WHERE indisp_id = $2
       RETURNING *;
     `;
 
@@ -156,17 +144,15 @@ export const toggleUnavailabilityStatus = async (req, res, next) => {
   }
 };
 
-/**
- * Remove uma indisponibilidade
- * DELETE /unavailability/:indisp_id
- */
+
 export const deleteUnavailability = async (req, res, next) => {
   try {
     const { indisp_id } = req.params;
 
     const query = `
-      DELETE FROM indisponibilidade
-      WHERE indisp_id = $1
+      DELETE 
+        FROM indisponibilidade
+       WHERE indisp_id = $1
       RETURNING indisp_id;
     `;
 

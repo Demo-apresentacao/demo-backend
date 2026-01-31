@@ -15,11 +15,15 @@ export const login = async (req, res, next) => {
     }
 
     const query = `
-      SELECT 
-        usu_id, usu_nome, usu_email, usu_acesso, usu_senha, usu_situacao 
-      FROM usuarios 
-      WHERE usu_email = $1 
-      LIMIT 1;
+      SELECT usu_id, 
+             usu_nome, 
+             usu_email, 
+             usu_acesso, 
+             usu_senha, 
+             usu_situacao 
+        FROM usuarios 
+       WHERE usu_email = $1 
+       LIMIT 1;
     `;
 
     const result = await pool.query(query, [emailFinal]);

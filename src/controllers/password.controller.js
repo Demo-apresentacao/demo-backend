@@ -57,9 +57,10 @@ export const resetPassword = async (req, res, next) => {
     const { usu_senha } = req.body;
 
     const query = `
-      SELECT * FROM usuarios 
-      WHERE usu_token_reset = $1 
-      AND usu_expiracao_token > NOW()
+      SELECT * 
+        FROM usuarios 
+       WHERE usu_token_reset = $1 
+         AND usu_expiracao_token > NOW()
     `;
     
     const result = await pool.query(query, [token]);
@@ -70,16 +71,15 @@ export const resetPassword = async (req, res, next) => {
 
     const user = result.rows[0];
 
-    // 2. USAMOS SUA FUNÇÃO UTIL AQUI (Muito mais limpo!)
     const newPasswordHash = await hashPassword(usu_senha);
 
     // Atualiza senha e limpa tokens
     await pool.query(
       `UPDATE usuarios 
-       SET usu_senha = $1, 
-           usu_token_reset = NULL, 
-           usu_expiracao_token = NULL 
-       WHERE usu_id = $2`,
+          SET usu_senha = $1, 
+              usu_token_reset = NULL, 
+              usu_expiracao_token = NULL 
+        WHERE usu_id = $2`,
       [newPasswordHash, user.usu_id]
     );
 
