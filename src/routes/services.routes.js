@@ -225,6 +225,29 @@ router.patch('/:serv_id/status', toggleServiceStatus);
  */
 router.delete('/:serv_id', deleteService);
 
+/**
+ * @swagger
+ * /services/vehicle/{veic_usu_id}:
+ *   get:
+ *     summary: Lista os serviços vinculados a um veículo
+ *     tags:
+ *       - Services
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: veic_usu_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do veículo do usuário
+ *     responses:
+ *       200:
+ *         description: Lista de serviços do veículo
+ *       404:
+ *         description: Veículo não encontrado ou sem serviços
+ */
 router.get('/vehicle/:veic_usu_id', getServicesByVehicle);
+
 
 export default router;
