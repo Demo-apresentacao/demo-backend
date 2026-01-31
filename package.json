@@ -1,5 +1,5 @@
 {
-  "name": "urban-backend",
+  "name": "demo-backend",
   "version": "1.0.0",
   "type": "module",
   "description": "",
@@ -11,15 +11,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Urban-apresentacao/urban-backend.git"
+    "url": "git+https://github.com/Demo-apresentacao/demo-backend.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Urban-apresentacao/urban-backend/issues"
+    "url": "https://github.com/Demo-apresentacao/demo-backend/issues"
   },
-  "homepage": "https://github.com/Urban-apresentacao/urban-backend#readme",
+  "homepage": "https://github.com/Demo-apresentacao/demo-backend#readme",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

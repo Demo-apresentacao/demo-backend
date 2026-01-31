@@ -1,93 +1,116 @@
-# Urban Backend 🚗✨
+# Demo Backend 🚀
 
-Backend do sistema **Urban**, uma plataforma web de agendamentos voltada para estética automotiva.
+O **Demo Backend** é uma API RESTful de alta performance desenvolvida para gerenciar um ecossistema completo de **serviços automotivos**, **agendamentos**, **gestão de frota** e **controle de usuários**.
 
-Este projeto foi estruturado com foco em **organização, escalabilidade e boas práticas**, servindo como base para um produto real (não apenas um projeto acadêmico).
+A aplicação foi projetada para atender cenários reais de oficinas, centros automotivos e plataformas digitais que necessitam de **organização operacional**, **segurança**, **escalabilidade** e **facilidade de integração** com sistemas externos.
 
----
+Construído com **Node.js** e a versão mais recente do **Express**, o projeto adota uma arquitetura **modular**, **bem desacoplada** e orientada a boas práticas de desenvolvimento, facilitando manutenção, evolução contínua e testes.  
 
-## 📌 Tecnologias utilizadas
+O backend oferece suporte a autenticação segura via **JWT**, controle de permissões, documentação interativa com **Swagger**, integração com serviços de e-mail transacional e proteção contra ataques comuns, tornando-o adequado tanto para ambientes de **desenvolvimento** quanto de **produção**.
 
-- Node.js
-- Express
-- PostgreSQL (Neon – futuramente)
-- JavaScript (ES Modules)
-- Nodemon
-- Dotenv
+<br>
 
----
+## 🛠️ Tecnologias e Dependências
 
-## 📂 Estrutura do projeto
+### 🔹 Core
+- **Node.js** (ES Modules)
+- **Express 5.x** — Framework web rápido e minimalista
+- **PostgreSQL (pg)** — Persistência de dados relacional
 
-```txt
-src/
-├─ config/        # Configurações globais (ex: banco de dados)
-├─ routes/        # Definição das rotas da API
-├─ controllers/   # Controllers (req/res)
-├─ services/      # Regras de negócio
-├─ middlewares/   # Middlewares (auth, erros, etc)
-├─ utils/         # Funções utilitárias reutilizáveis
-│
-├─ app.js         # Configuração do Express
-└─ server.js      # Inicialização do servidor
+### 🔐 Segurança e Autenticação
+- **JWT (JSON Web Token)** — Autenticação baseada em tokens
+- **Bcrypt** — Hash seguro de senhas
+- **Helmet** — Proteção de headers HTTP
+- **Express Rate Limit** — Prevenção contra força bruta e DoS
+- **CORS** — Controle de acesso entre origens
 
-Arquitetura
+### 📚 Utilitários e Documentação
+- **Swagger UI & JSDoc** — Documentação interativa da API
+- **Resend** — Envio de e-mails transacionais
+- **Dotenv** — Gerenciamento de variáveis de ambiente
+- **Nodemon** — Hot reload em desenvolvimento
 
-O projeto segue uma separação clara de responsabilidades:
-Routes: apenas definem os endpoints
-Controllers: recebem a requisição e retornam a resposta
-Services: concentram a regra de negócio
-Config: infraestrutura (banco, variáveis)
-Middlewares: autenticação, tratamento de erros
-Utils: funções auxiliares
+<br>
 
-Essa abordagem facilita:
-Manutenção
-Escalabilidade
-Testes
-Evolução para modelo SaaS
+## 📁 Estrutura de Pastas
 
+```text
+├── src/
+│   ├── config/          # Configurações de banco e serviços externos
+│   ├── controllers/     # Regras de negócio (Auth, Serviços, Agendamentos)
+│   ├── middlewares/     # Autenticação, validações e erros
+│   ├── routes/          # Endpoints da API
+│   ├── utils/           # Helpers (senha, e-mail, responses)
+│   ├── app.js           # Configuração do Express
+│   └── server.js        # Inicialização da aplicação
+└── swagger.config.js    # Configuração do Swagger
+```
 
-▶️ Como rodar o projeto localmente
-1. Instalar dependências
+<br>
+
+## 🚀 Instalação e Execução
+
+### 1️⃣ Clonar o Repositório
+
+```bash
+git clone https://github.com/Demo-apresentacao/demo-backend.git
+cd demo-backend
 npm install
+```
+<br>
+### 2️⃣ Configuração de Ambiente
 
-2. Criar arquivo .env
-PORT=3000
-# DATABASE_URL será configurado futuramente
+Crie um arquivo `.env` na raiz do projeto com base no arquivo `.env.example`  
+e configure as credenciais do banco de dados e serviços externos.
 
-3. Rodar em modo desenvolvimento
+### 3️⃣ Executar a Aplicação
+
+**Ambiente de Desenvolvimento**
+```bash
 npm run dev
-
-
-Servidor disponível em:
-
-http://localhost:3000
-
-🔍 Rota de teste (health check)
-GET /health
-
-
-Resposta esperada:
-
-{
-  "status": "ok",
-  "message": "API is running"
-}
-``` 
-
-## Gerando a chave secreta para o token JWT:
-
-no terminal do vscode:
-
-```
-  node
-``` 
-
-logo em seguida, rodar esse comando:
-
-```
-  require('crypto').randomBytes(64).toString('hex')
 ```
 
-após isso, copiar a key gerada e colar no .env, na JWT_SECRET, sem aspas
+**Ambiente de Produção**
+```bash
+npm start
+```
+<br>
+
+## 📖 Documentação da API
+
+A documentação interativa da API (Swagger) está disponível em:
+
+```
+http://localhost:PORTA/api-docs
+```
+
+<br>
+
+
+
+## 🛡️ Segurança
+
+A API implementa boas práticas de segurança, incluindo:
+
+- 🔒 **Criptografia** — Senhas nunca são armazenadas em texto plano
+- 🔑 **Proteção de Rotas** — Validação de JWT em endpoints sensíveis
+- 🧼 **Sanitização** — Headers seguros (Helmet) e limitação de requisições por IP
+<br>
+<br>
+
+
+## 👨‍💻 Desenvolvedores
+
+### Matheus Mota Tonini
+- GitHub: https://github.com/motaxyz  
+- LinkedIn: https://www.linkedin.com/in/matheusmotatonini/
+
+### Nei Junio Nogueira Gomes
+- GitHub: https://github.com/NeiJunio  
+- LinkedIn: https://www.linkedin.com/in/nei-junio-nogueira-gomes/
+
+<br>
+
+© 2026 - **Demo Apresentação**
+
+
