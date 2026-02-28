@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
 import {
   listAppointments,
@@ -35,32 +36,31 @@ const router = Router();
  *         - user_id
  *         - date_time
  *       properties:
- *         id:
- *           type: string
+ *         agend_id:
+ *           type: integer
  *           description: ID do agendamento
- *           example: "appt_01"
- *         user_id:
- *           type: string
+ *           example: 1
+ *         usu_id:
+ *           type: integer
  *           description: ID do usuário
- *           example: "user_01"
- *         date_time:
- *           type: string
- *           format: date-time
- *           description: "Data e hora do agendamento"
- *           example: "2024-12-30T15:00:00.000Z"
+ *           example: 1
+ *         agend_data:
+ *           type: date
+ *           format: date
+ *           description: Data do agendamento
+ *           example: "2024-12-30"
+ *         agend_hora:
+ *           type: time
+ *           description: Hora do agendamento
+ *           example: "15:00:00"
  *         status:
- *           type: string
- *           description: "Status do agendamento (agendado, cancelado, concluído)"
- *           example: "agendado"
- *         notes:
+ *           type: integer
+ *           description: Status do agendamento (agendado, cancelado, concluído)
+ *           example: 1
+ *         agend_observ:
  *           type: string
  *           description: Observações adicionais
  *           example: "Cliente solicitou atendimento rápido"
- */
-
-/**
- * Middleware de Segurança
- * Aplica a verificação de token (JWT) para todas as rotas abaixo.
  */
 
 /**
@@ -78,11 +78,14 @@ const router = Router();
  *           type: string
  *     responses:
  *       200:
- *         description: Status retornado
+ *         description: Status retornado com sucesso
  */
 router.get('/public/status/:token', getPublicAppointmentStatus);
 
-// --- MIDDLEWARE DE SEGURANÇA (BLOQUEIA TUDO DAQUI PRA BAIXO) ---
+/**
+ * Middleware de Segurança
+ * Aplica verificação de token (JWT) para todas as rotas abaixo.
+ */
 router.use(verifyToken);
 
 /**
@@ -106,7 +109,11 @@ router.use(verifyToken);
  *       401:
  *         description: Não autorizado
  */
-router.get('/', listAppointments);
+router.get(
+  '/',
+  checkPermission('agenda.listar'),
+  listAppointments
+);
 
 /**
  * @swagger
@@ -126,7 +133,7 @@ router.get('/', listAppointments);
  *           type: string
  *     responses:
  *       200:
- *         description: Agendamento encontrado
+ *         description: Agendamento encontrado com sucesso
  *         content:
  *           application/json:
  *             schema:
@@ -134,7 +141,11 @@ router.get('/', listAppointments);
  *       404:
  *         description: Agendamento não encontrado
  */
-router.get('/:id', getAppointmentById);
+router.get(
+  '/:id',
+  checkPermission('agenda.visualizar'),
+  getAppointmentById
+);
 
 /**
  * @swagger
@@ -157,7 +168,11 @@ router.get('/:id', getAppointmentById);
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', createAppointment);
+router.post(
+  '/',
+  checkPermission('agenda.criar'),
+  createAppointment
+);
 
 /**
  * @swagger
@@ -187,14 +202,18 @@ router.post('/', createAppointment);
  *       404:
  *         description: Agendamento não encontrado
  */
-router.put('/:id', updateAppointment);
+router.put(
+  '/:id',
+  checkPermission('agenda.editar'),
+  updateAppointment
+);
 
 /**
  * @swagger
  * /appointments/{id}/cancel:
  *   patch:
  *     summary: Cancela um agendamento
- *     description: "Rota específica para alteração de status do agendamento para cancelado"
+ *     description: Rota específica para alteração de status do agendamento para cancelado
  *     tags:
  *       - Appointments
  *     security:
@@ -212,6 +231,10 @@ router.put('/:id', updateAppointment);
  *       404:
  *         description: Agendamento não encontrado
  */
-router.patch('/:id/cancel', cancelAppointment);
+router.patch(
+  '/:id/cancel',
+  checkPermission('agenda.cancelar'),
+  cancelAppointment
+);
 
 export default router;

@@ -36,9 +36,9 @@ const router = Router();
  *         - brand_id
  *       properties:
  *         mod_id:
- *           type: string
+ *           type: integer
  *           description: ID do modelo
- *           example: "mod_01"
+ *           example: 1
  *         name:
  *           type: string
  *           description: Nome do modelo

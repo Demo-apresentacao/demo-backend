@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
 import { 
   listUsers, 
@@ -25,28 +26,6 @@ const router = Router();
  *   - name: Users
  *     description: Gerenciamento de usuários do sistema
  */
-
-/**
- * @swagger
- * /users:
- *   post:
- *     summary: Cria um novo usuário
- *     tags:
- *       - Users
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/User'
- *     responses:
- *       201:
- *         description: Usuário criado com sucesso
- */
-router.post('/', createUser);
-
 
 /**
  * @swagger
@@ -76,11 +55,47 @@ router.post('/', createUser);
  *           example: "2025-01-01T10:00:00.000Z"
  */
 
- /**
-  * Middleware de Segurança
-  * Aplica a verificação de token (JWT) para todas as rotas abaixo.
-  */
+
+/**
+ * ======================================================
+ * CRIAR USUÁRIO (PÚBLICO)
+ * ======================================================
+ */
+
+/**
+ * @swagger
+ * /users:
+ *   post:
+ *     summary: Cria um novo usuário
+ *     tags:
+ *       - Users
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/User'
+ *     responses:
+ *       201:
+ *         description: Usuário criado com sucesso
+ */
+router.post('/', createUser);
+
+
+/**
+ * ======================================================
+ * Middleware de Segurança
+ * Todas as rotas abaixo exigem autenticação
+ * ======================================================
+ */
 router.use(verifyToken);
+
+
+/**
+ * ======================================================
+ * LISTAR USUÁRIOS
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -101,7 +116,18 @@ router.use(verifyToken);
  *               items:
  *                 $ref: '#/components/schemas/User'
  */
-router.get('/', listUsers);
+router.get(
+  '/',
+  checkPermission('usuarios.listar'),
+  listUsers
+);
+
+
+/**
+ * ======================================================
+ * BUSCAR USUÁRIO POR ID
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -124,8 +150,18 @@ router.get('/', listUsers);
  *       404:
  *         description: Usuário não encontrado
  */
-router.get('/:id', getUserById);
+router.get(
+  '/:id',
+  checkPermission('usuarios.visualizar'),
+  getUserById
+);
 
+
+/**
+ * ======================================================
+ * ATUALIZAR USUÁRIO
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -154,7 +190,18 @@ router.get('/:id', getUserById);
  *       404:
  *         description: Usuário não encontrado
  */
-router.patch('/:id', updateUser);
+router.patch(
+  '/:id',
+  checkPermission('usuarios.editar'),
+  updateUser
+);
+
+
+/**
+ * ======================================================
+ * ALTERAR STATUS
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -177,7 +224,18 @@ router.patch('/:id', updateUser);
  *       404:
  *         description: Usuário não encontrado
  */
-router.patch('/:id/status', updateUserStatus);
+router.patch(
+  '/:id/status',
+  checkPermission('usuarios.alterar_status'),
+  updateUserStatus
+);
+
+
+/**
+ * ======================================================
+ * VEÍCULOS DO USUÁRIO
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -198,7 +256,18 @@ router.patch('/:id/status', updateUserStatus);
  *       200:
  *         description: Lista de veículos retornada com sucesso
  */
-router.get('/:id/vehicles', getUserVehicles);
+router.get(
+  '/:id/vehicles',
+  checkPermission('usuarios.veiculos'),
+  getUserVehicles
+);
+
+
+/**
+ * ======================================================
+ * EXCLUIR USUÁRIO
+ * ======================================================
+ */
 
 /**
  * @swagger
@@ -221,6 +290,10 @@ router.get('/:id/vehicles', getUserVehicles);
  *       404:
  *         description: Usuário não encontrado
  */
-router.delete('/:id', deleteUser);
+router.delete(
+  '/:id',
+  checkPermission('usuarios.excluir'),
+  deleteUser
+);
 
 export default router;

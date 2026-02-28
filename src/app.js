@@ -59,11 +59,12 @@ import categoriesRoutes from './routes/categories.routes.js';
 import serviceCategoriesRoutes from './routes/serviceCategories.routes.js';
 import brandsRoutes from './routes/brands.routes.js';
 import modelsRoutes from './routes/models.routes.js';
-import loginRoutes from './routes/login.routes.js';
+import authRoutes from './routes/auth.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import passwordRoutes from './routes/password.routes.js';
 import getCategoriesVehiclesForServicesRoutes from './routes/categoriesVehiclesForServices.routes.js'
+import permissionsRoutes from './routes/permissions.routes.js';
 
 // Rota de healthcheck (Keep-Alive)
 app.use('/health', healthRoutes);
@@ -83,8 +84,9 @@ app.use('/service-categories', serviceCategoriesRoutes);
 app.use('/brands', brandsRoutes);
 app.use('/models', modelsRoutes);
 app.use('/categories-vehicles-for-services', getCategoriesVehiclesForServicesRoutes);
+app.use('/permissions', permissionsRoutes);
 
-app.use('/auth', loginRoutes); 
+app.use('/auth', authRoutes); 
 
 app.use('/api/dashboard', dashboardRoutes); 
 

@@ -33,9 +33,9 @@ const router = Router();
  *         - name
  *       properties:
  *         id:
- *           type: string
+ *           type: integer
  *           description: ID da categoria
- *           example: "cat_01"
+ *           example: 1
  *         name:
  *           type: string
  *           description: Nome da categoria
