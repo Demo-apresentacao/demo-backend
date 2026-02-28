@@ -1,19 +1,29 @@
 import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-    const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Acesso negado. Token não fornecido.'
+    });
+  }
 
-    if (!token) {
-        return res.status(401).json({ status: 'error', message: 'Acesso negado. Token não fornecido.' });
-    }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    try {
-        const verified = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = verified; // Adiciona os dados do usuário (id, acesso) na requisição
-        next(); // Passa para o próximo controller (ex: rota de listar produtos)
-    } catch (err) {
-        res.status(400).json({ status: 'error', message: 'Token inválido ou expirado.' });
-    }
-}
+    // 👇 aqui garantimos um padrão
+    req.user = {
+      id: decoded.usu_id
+    };
+
+    next();
+  } catch (err) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Token inválido ou expirado.'
+    });
+  }
+};

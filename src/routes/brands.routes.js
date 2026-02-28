@@ -33,18 +33,18 @@ const router = Router();
  *       required:
  *         - name
  *       properties:
- *         id:
- *           type: string
+ *         mar_id:
+ *           type: integer
  *           description: ID da marca
- *           example: "brand_01"
- *         name:
+ *           example: 1
+ *         mar_name:
  *           type: string
  *           description: Nome da marca
  *           example: "Toyota"
- *         category_id:
- *           type: string
+ *         cat_id:
+ *           type: integer
  *           description: ID da categoria associada
- *           example: "cat_01"
+ *           example: 1
  */
 
  /**

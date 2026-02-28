@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
 import {
   listVehicles,
@@ -13,7 +14,6 @@ import {
   createVehicle,
   deleteVehicle,
   updateVehicleByAdmin,
-  updateVehicleByUser,
   toggleVehicleStatus
 } from '../controllers/vehicles.controller.js';
 
@@ -56,10 +56,10 @@ const router = Router();
  *           example: true
  */
 
- /**
-  * Middleware de Segurança
-  * Aplica a verificação de token (JWT) para todas as rotas abaixo.
-  */
+/**
+ * Middleware de Segurança
+ * Aplica verificação de token (JWT) para todas as rotas abaixo.
+ */
 router.use(verifyToken);
 
 /**
@@ -81,7 +81,11 @@ router.use(verifyToken);
  *               items:
  *                 $ref: '#/components/schemas/Vehicle'
  */
-router.get('/', listVehicles);
+router.get(
+  '/',
+  checkPermission('veiculos.listar'),
+  listVehicles
+);
 
 /**
  * @swagger
@@ -100,11 +104,19 @@ router.get('/', listVehicles);
  *           type: string
  *     responses:
  *       200:
- *         description: Veículo encontrado
+ *         description: Veículo encontrado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Vehicle'
  *       404:
  *         description: Veículo não encontrado
  */
-router.get('/:id', getVehicleById);
+router.get(
+  '/:id',
+  checkPermission('veiculos.visualizar'),
+  getVehicleById
+);
 
 /**
  * @swagger
@@ -125,36 +137,17 @@ router.get('/:id', getVehicleById);
  *       201:
  *         description: Veículo criado com sucesso
  */
-router.post('/', createVehicle);
-
-/**
- * @swagger
- * /vehicles/{id}:
- *   delete:
- *     summary: Remove um veículo
- *     tags:
- *       - Vehicles
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Veículo removido com sucesso
- *       404:
- *         description: Veículo não encontrado
- */
-router.delete('/:id', deleteVehicle);
+router.post(
+  '/',
+  checkPermission('veiculos.criar'),
+  createVehicle
+);
 
 /**
  * @swagger
  * /vehicles/{veic_id}:
  *   patch:
- *     summary: Atualiza dados de um veículo (rota administrativa)
+ *     summary: Atualiza dados de um veículo
  *     tags:
  *       - Vehicles
  *     security:
@@ -174,35 +167,14 @@ router.delete('/:id', deleteVehicle);
  *     responses:
  *       200:
  *         description: Veículo atualizado com sucesso
+ *       404:
+ *         description: Veículo não encontrado
  */
-router.patch('/:veic_id', updateVehicleByAdmin);
-
-/**
- * @swagger
- * /vehicles/user/{veic_id}:
- *   patch:
- *     summary: Atualiza dados de um veículo (rota do usuário)
- *     tags:
- *       - Vehicles
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: veic_id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Vehicle'
- *     responses:
- *       200:
- *         description: Veículo atualizado pelo usuário
- */
-router.patch('/user/:veic_id', updateVehicleByUser);
+router.patch(
+  '/:veic_id',
+  checkPermission('veiculos.editar'),
+  updateVehicleByAdmin
+);
 
 /**
  * @swagger
@@ -222,7 +194,40 @@ router.patch('/user/:veic_id', updateVehicleByUser);
  *     responses:
  *       200:
  *         description: Status do veículo alterado com sucesso
+ *       404:
+ *         description: Veículo não encontrado
  */
-router.patch('/:veic_id/status', toggleVehicleStatus);
+router.patch(
+  '/:veic_id/status',
+  checkPermission('veiculos.inativar'),
+  toggleVehicleStatus
+);
+
+/**
+ * @swagger
+ * /vehicles/{id}:
+ *   delete:
+ *     summary: Remove um veículo do sistema
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Veículo removido com sucesso
+ *       404:
+ *         description: Veículo não encontrado
+ */
+router.delete(
+  '/:id',
+  checkPermission('veiculos.inativar'),
+  deleteVehicle
+);
 
 export default router;

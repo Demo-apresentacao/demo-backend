@@ -81,3 +81,62 @@ export const login = async (req, res, next) => {
     next(error);
   }
 };
+
+
+export const getMe = async (req, res) => {
+  try {
+
+console.log("req.user:", req.user); // 👈 veja se tem id
+
+    const userId = req.user.id;
+
+    // 1️⃣ Buscar usuário
+    const userResult = await pool.query(
+      `
+      SELECT usu_id, 
+             usu_nome, 
+             usu_email
+        FROM usuarios
+       WHERE usu_id = $1
+      `,
+      [userId]
+    );
+
+    if (userResult.rowCount === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Usuário não encontrado.'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // 2️⃣ Buscar permissões
+    const permissionsResult = await pool.query(
+      `
+          SELECT p.per_chave
+            FROM usuario_permissoes AS up
+      INNER JOIN permissoes AS p ON up.per_id = p.per_id
+           WHERE up.usu_id = $1
+      `,
+      [userId]
+    );
+
+    const permissoes = permissionsResult.rows.map(p => p.per_chave);
+
+    // 3️⃣ Retornar tudo
+    return res.json({
+      id: user.usu_id,
+      nome: user.usu_nome,
+      email: user.usu_email,
+      permissoes
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Erro ao buscar usuário.'
+    });
+  }
+};
