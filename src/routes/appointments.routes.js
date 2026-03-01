@@ -111,7 +111,7 @@ router.use(verifyToken);
  */
 router.get(
   '/',
-  checkPermission('agenda.listar'),
+  checkPermission('agendamentos.listar'),
   listAppointments
 );
 
@@ -143,7 +143,7 @@ router.get(
  */
 router.get(
   '/:id',
-  checkPermission('agenda.visualizar'),
+  checkPermission('agendamentos.visualizar'),
   getAppointmentById
 );
 
@@ -170,7 +170,7 @@ router.get(
  */
 router.post(
   '/',
-  checkPermission('agenda.criar'),
+  checkPermission('agendamentos.criar'),
   createAppointment
 );
 
@@ -204,7 +204,7 @@ router.post(
  */
 router.put(
   '/:id',
-  checkPermission('agenda.editar'),
+  checkPermission('agendamentos.editar'),
   updateAppointment
 );
 
@@ -233,7 +233,7 @@ router.put(
  */
 router.patch(
   '/:id/cancel',
-  checkPermission('agenda.cancelar'),
+  checkPermission('agendamentos.cancelar'),
   cancelAppointment
 );
 

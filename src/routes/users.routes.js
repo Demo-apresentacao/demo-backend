@@ -1,22 +1,26 @@
 /**
  * @file users.routes.js
  * @description Rotas para gerenciamento de usuários do sistema.
- * @module Routes/Users
  */
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
 import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
-import { 
-  listUsers, 
-  getUserById, 
-  createUser, 
-  updateUser, 
+import {
+  listUsers,
+  getUserById,
+  createUser,
+  updateUser,
   updateUserStatus,
   deleteUser,
   getUserVehicles
 } from '../controllers/users.controller.js';
+
+import {
+  getUserPermissions,
+  updateUserPermissions
+} from '../controllers/permissions.controller.js';
 
 const router = Router();
 
@@ -29,7 +33,17 @@ const router = Router();
 
 /**
  * @swagger
+ * tags:
+ *   - name: Users
+ *     description: Gerenciamento de usuários do sistema
+ *
  * components:
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ *
  *   schemas:
  *     User:
  *       type: object
@@ -54,7 +68,6 @@ const router = Router();
  *           format: date-time
  *           example: "2025-01-01T10:00:00.000Z"
  */
-
 
 /**
  * ======================================================
@@ -81,15 +94,13 @@ const router = Router();
  */
 router.post('/', createUser);
 
-
 /**
  * ======================================================
- * Middleware de Segurança
- * Todas as rotas abaixo exigem autenticação
+ * ROTAS PROTEGIDAS
  * ======================================================
  */
-router.use(verifyToken);
 
+router.use(verifyToken);
 
 /**
  * ======================================================
@@ -116,12 +127,7 @@ router.use(verifyToken);
  *               items:
  *                 $ref: '#/components/schemas/User'
  */
-router.get(
-  '/',
-  checkPermission('usuarios.listar'),
-  listUsers
-);
-
+router.get('/', checkPermission('usuarios.listar'), listUsers);
 
 /**
  * ======================================================
@@ -150,12 +156,7 @@ router.get(
  *       404:
  *         description: Usuário não encontrado
  */
-router.get(
-  '/:id',
-  checkPermission('usuarios.visualizar'),
-  getUserById
-);
-
+router.get('/:id', checkPermission('usuarios.visualizar'), getUserById);
 
 /**
  * ======================================================
@@ -190,12 +191,7 @@ router.get(
  *       404:
  *         description: Usuário não encontrado
  */
-router.patch(
-  '/:id',
-  checkPermission('usuarios.editar'),
-  updateUser
-);
-
+router.patch('/:id', checkPermission('usuarios.editar'), updateUser);
 
 /**
  * ======================================================
@@ -224,12 +220,7 @@ router.patch(
  *       404:
  *         description: Usuário não encontrado
  */
-router.patch(
-  '/:id/status',
-  checkPermission('usuarios.alterar_status'),
-  updateUserStatus
-);
-
+router.patch('/:id/status', checkPermission('usuarios.alterar_status'), updateUserStatus);
 
 /**
  * ======================================================
@@ -256,12 +247,7 @@ router.patch(
  *       200:
  *         description: Lista de veículos retornada com sucesso
  */
-router.get(
-  '/:id/vehicles',
-  checkPermission('usuarios.veiculos'),
-  getUserVehicles
-);
-
+router.get('/:id/vehicles', checkPermission('usuarios.veiculos'), getUserVehicles);
 
 /**
  * ======================================================
@@ -290,10 +276,66 @@ router.get(
  *       404:
  *         description: Usuário não encontrado
  */
-router.delete(
-  '/:id',
-  checkPermission('usuarios.excluir'),
-  deleteUser
-);
+router.delete('/:id', checkPermission('usuarios.excluir'), deleteUser);
+
+/**
+ * ======================================================
+ * PERMISSÕES DO USUÁRIO
+ * ======================================================
+ */
+
+/**
+ * @swagger
+ * /users/{id}/permissions:
+ *   get:
+ *     summary: Retorna a lista de permissões ativas de um usuário
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de permissões retornada com sucesso
+ */
+router.get('/:id/permissions', checkPermission('permissoes.visualizar'), getUserPermissions);
+
+/**
+ * @swagger
+ * /users/{id}/permissions:
+ *   put:
+ *     summary: Sincroniza (substitui) as permissões de um usuário
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               permissions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   example: "usuarios.listar"
+ *     responses:
+ *       200:
+ *         description: Permissões atualizadas com sucesso
+ */
+router.put('/:id/permissions', checkPermission('permissoes.editar'), updateUserPermissions);
 
 export default router;
