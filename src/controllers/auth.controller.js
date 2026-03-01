@@ -95,7 +95,8 @@ console.log("req.user:", req.user); // 👈 veja se tem id
       `
       SELECT usu_id, 
              usu_nome, 
-             usu_email
+             usu_email,
+             usu_acesso
         FROM usuarios
        WHERE usu_id = $1
       `,
@@ -129,6 +130,7 @@ console.log("req.user:", req.user); // 👈 veja se tem id
       id: user.usu_id,
       nome: user.usu_nome,
       email: user.usu_email,
+      acesso: user.usu_acesso,
       permissoes
     });
 
