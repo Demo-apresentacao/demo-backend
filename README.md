@@ -76,6 +76,16 @@ npm start
 ```
 <br>
 
+## 🌐 Acesso à Aplicação Web
+
+A aplicação está disponível em produção no seguinte endereço:
+
+```
+https://demo-apresentacao.vercel.app
+```
+
+<br>
+
 ## 📖 Documentação da API
 
 A documentação interativa da API (Swagger) está disponível em:
