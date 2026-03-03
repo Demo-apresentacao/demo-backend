@@ -199,7 +199,7 @@ router.patch(
  */
 router.patch(
   '/:veic_id/status',
-  checkPermission('veiculos.inativar'),
+  checkPermission('veiculos.alterar_status'),
   toggleVehicleStatus
 );
 

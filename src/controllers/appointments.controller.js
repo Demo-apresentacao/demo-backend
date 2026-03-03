@@ -128,14 +128,118 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ve
 // --- CONTROLLERS ---
 
 // GET /appointments
+// export const listAppointments = async (req, res, next) => {
+//     try {
+//         const {
+//             search,
+//             date,
+//             status,
+//             page = 1,
+//             limit = 10,
+//             orderBy = 'agend_data',
+//             orderDirection = 'DESC'
+//         } = req.query;
+
+//         const offset = (page - 1) * limit;
+
+//         const sortMap = {
+//             'agend_id': 'a.agend_id',
+//             'veic_placa': 'v.veic_placa',
+//             'agend_data': 'a.agend_data',
+//             'agend_horario': 'a.agend_horario',
+//             'usu_nome': 'u.usu_nome',
+//             'agend_situacao': 'a.agend_situacao'
+//         };
+
+//         const safeOrderBy = sortMap[orderBy] || 'a.agend_data';
+//         const safeDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+//         let orderByClause = `ORDER BY ${safeOrderBy} ${safeDirection}`;
+//         if (safeOrderBy === 'a.agend_data') {
+//             orderByClause += `, a.agend_horario ${safeDirection}`;
+//         }
+
+//         let baseQuery = `
+//                 FROM agendamentos    AS a
+//                 JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
+//                 JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
+//                 JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
+//            LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
+//            LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+//         `;
+
+//         const conditions = [];
+//         const values = [];
+//         let paramCounter = 1;
+
+//         if (search) {
+//             conditions.push(`(u.usu_nome ILIKE $${paramCounter} OR v.veic_placa ILIKE $${paramCounter})`);
+//             values.push(`%${search}%`);
+//             paramCounter++;
+//         }
+//         if (date) {
+//             conditions.push(`DATE(a.agend_data) = $${paramCounter}`);
+//             values.push(date);
+//             paramCounter++;
+//         }
+
+//         if (status) {
+//             conditions.push(`a.agend_situacao = $${paramCounter}`);
+//             values.push(status);
+//             paramCounter++;
+//         }
+
+//         const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+
+//         let queryText = `
+//           SELECT a.agend_id, 
+//                  a.agend_data,
+//                  a.agend_horario, 
+//                  a.agend_situacao,
+//                  a.tracking_token,
+//                  v.veic_placa, 
+//                  u.usu_nome,
+//                  STRING_AGG(s.serv_nome, ', ') AS lista_servicos
+//           ${baseQuery}
+//           ${whereClause}
+//           GROUP BY a.agend_id, 
+//                    a.agend_data, 
+//                    a.agend_horario, 
+//                    a.agend_situacao, 
+//                    a.tracking_token, 
+//                    v.veic_placa, 
+//                    u.usu_nome 
+// `;
+
+//         let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
+
+//         queryText += ` ${orderByClause} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+//         values.push(limit, offset);
+
+//         const result = await pool.query(queryText, values);
+//         const countValues = values.slice(0, paramCounter - 1);
+//         const countResult = await pool.query(countQuery, countValues);
+
+//         const totalItems = parseInt(countResult.rows[0]?.total || 0);
+//         const totalPages = Math.ceil(totalItems / limit);
+
+//         return res.status(200).json({
+//             status: 'success',
+//             data: result.rows,
+//             meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
+//         });
+
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
+// Localize a função listAppointments no seu controller
 export const listAppointments = async (req, res, next) => {
     try {
         const {
-            search,
-            date,
-            status,
-            page = 1,
-            limit = 10,
+            search, date, status,
+            page = 1, limit = 10,
             orderBy = 'agend_data',
             orderDirection = 'DESC'
         } = req.query;
@@ -159,13 +263,18 @@ export const listAppointments = async (req, res, next) => {
             orderByClause += `, a.agend_horario ${safeDirection}`;
         }
 
+        // QUERY ATUALIZADA COM CÁLCULO DE DURAÇÃO
         let baseQuery = `
-                FROM agendamentos    AS a
-                JOIN veiculo_usuario AS vu  ON a.veic_usu_id = vu.veic_usu_id
-                JOIN usuarios        AS u   ON vu.usu_id     = u.usu_id
-                JOIN veiculos        AS v   ON vu.veic_id    = v.veic_id
-           LEFT JOIN agenda_servicos AS ags ON a.agend_id    = ags.agend_id
-           LEFT JOIN servicos        AS s   ON ags.serv_id   = s.serv_id
+            FROM agendamentos AS a
+            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+            JOIN usuarios AS u ON vu.usu_id = u.usu_id
+            JOIN veiculos AS v ON vu.veic_id = v.veic_id
+            JOIN modelos AS m ON v.mod_id = m.mod_id
+            JOIN marcas AS ma ON m.mar_id = ma.mar_id
+            JOIN categorias AS c ON ma.cat_id = c.cat_id
+            LEFT JOIN agenda_servicos AS ags ON a.agend_id = ags.agend_id
+            LEFT JOIN servicos AS s ON ags.serv_id = s.serv_id
+            LEFT JOIN servicos_tipo_veiculo AS stv ON (ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id)
         `;
 
         const conditions = [];
@@ -182,7 +291,6 @@ export const listAppointments = async (req, res, next) => {
             values.push(date);
             paramCounter++;
         }
-
         if (status) {
             conditions.push(`a.agend_situacao = $${paramCounter}`);
             values.push(status);
@@ -191,6 +299,7 @@ export const listAppointments = async (req, res, next) => {
 
         const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 
+        // Selecionando a duração total em minutos (duracao_total_min)
         let queryText = `
           SELECT a.agend_id, 
                  a.agend_data,
@@ -199,34 +308,26 @@ export const listAppointments = async (req, res, next) => {
                  a.tracking_token,
                  v.veic_placa, 
                  u.usu_nome,
-                 STRING_AGG(s.serv_nome, ', ') AS lista_servicos
+                 COALESCE(SUM(EXTRACT(EPOCH FROM stv.stv_duracao)/60), 30) as duracao_total_min,
+                 STRING_AGG(DISTINCT s.serv_nome, ', ') AS lista_servicos
           ${baseQuery}
           ${whereClause}
-          GROUP BY a.agend_id, 
-                   a.agend_data, 
-                   a.agend_horario, 
-                   a.agend_situacao, 
-                   a.tracking_token, 
-                   v.veic_placa, 
-                   u.usu_nome 
-`;
-
-        let countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
+          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, a.tracking_token, v.veic_placa, u.usu_nome
+        `;
 
         queryText += ` ${orderByClause} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
         values.push(limit, offset);
 
         const result = await pool.query(queryText, values);
-        const countValues = values.slice(0, paramCounter - 1);
-        const countResult = await pool.query(countQuery, countValues);
+        const countQuery = `SELECT COUNT(DISTINCT a.agend_id) as total ${baseQuery} ${whereClause}`;
+        const countResult = await pool.query(countQuery, values.slice(0, paramCounter - 1));
 
         const totalItems = parseInt(countResult.rows[0]?.total || 0);
-        const totalPages = Math.ceil(totalItems / limit);
 
         return res.status(200).json({
             status: 'success',
             data: result.rows,
-            meta: { totalItems, totalPages, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
+            meta: { totalItems, totalPages: Math.ceil(totalItems / limit) }
         });
 
     } catch (error) {
@@ -235,55 +336,118 @@ export const listAppointments = async (req, res, next) => {
 };
 
 // GET /appointments/:id
+// export const getAppointmentById = async (req, res, next) => {
+//     try {
+//         const { id } = req.params;
+//         const queryMain = `
+//             SELECT 
+//                   a.*, 
+//                   u.usu_nome, 
+//                   u.usu_telefone, 
+//                   m.mod_nome AS veic_modelo, 
+//                   v.veic_placa
+//              FROM agendamentos    AS a
+//              JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+//              JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
+//              JOIN veiculos        AS v ON vu.veic_id     = v.veic_id
+//              JOIN modelos         AS m ON v.mod_id       = m.mod_id
+//             WHERE a.agend_id = $1
+//         `;
+
+
+//         const resultMain = await pool.query(queryMain, [id]);
+
+//         if (resultMain.rows.length === 0) {
+//             return res.status(404).json({ message: 'Agendamento não encontrado' });
+//         }
+
+//         // Para pegar o preço e duração corretos, precisamos fazer o JOIN complexo aqui também
+//         // Mas para visualização simples, pegar da tabela 'servicos' (nome) geralmente basta.
+//         // Se quiser mostrar o preço histórico, teria que salvar o preço no momento do agendamento (sugestão futura).
+//         // Por enquanto, vamos pegar o nome do serviço base.
+//         const queryServices = `
+//         SELECT ags.agend_serv_id, 
+//                s.serv_id, 
+//                s.serv_nome, 
+//                sit.agend_serv_situ_nome
+//           FROM agenda_servicos AS ags
+//           JOIN servicos        AS s ON ags.serv_id = s.serv_id
+//           JOIN agenda_servicos_situacao AS sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
+//          WHERE  ags.agend_id = $1
+//         `;
+//         const resultServices = await pool.query(queryServices, [id]);
+
+//         return res.json({
+//             status: 'success',
+//             data: { ...resultMain.rows[0], servicos: resultServices.rows }
+//         });
+
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
 export const getAppointmentById = async (req, res, next) => {
     try {
         const { id } = req.params;
+        
+        // 1. Busca os dados principais + Valor Total
         const queryMain = `
-            SELECT 
-                  a.*, 
-                  u.usu_nome, 
-                  u.usu_telefone, 
-                  m.mod_nome AS veic_modelo, 
-                  v.veic_placa
-             FROM agendamentos    AS a
-             JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
-             JOIN usuarios        AS u ON vu.usu_id      = u.usu_id
-             JOIN veiculos        AS v ON vu.veic_id     = v.veic_id
-             JOIN modelos         AS m ON v.mod_id       = m.mod_id
-            WHERE a.agend_id = $1
+            SELECT a.*, u.usu_nome, u.usu_telefone, m.mod_nome AS veic_modelo, v.veic_placa,
+            COALESCE((
+                SELECT SUM(stv_inner.stv_preco)
+                FROM agenda_servicos AS ags_inner
+                JOIN servicos_tipo_veiculo AS stv_inner ON ags_inner.serv_id = stv_inner.serv_id
+                JOIN categorias AS c_inner ON stv_inner.tps_id = c_inner.tps_id
+                JOIN marcas AS ma_inner ON c_inner.cat_id = ma_inner.cat_id
+                JOIN modelos AS mo_inner ON ma_inner.mar_id = mo_inner.mar_id
+                JOIN veiculos AS ve_inner ON mo_inner.mod_id = ve_inner.mod_id
+                JOIN veiculo_usuario AS vu_inner ON ve_inner.veic_id = vu_inner.veic_id
+                WHERE ags_inner.agend_id = a.agend_id 
+                  AND vu_inner.veic_usu_id = a.veic_usu_id
+            ), 0) AS agend_valor_total
+            FROM agendamentos AS a
+            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+            JOIN usuarios AS u ON vu.usu_id = u.usu_id
+            JOIN veiculos AS v ON vu.veic_id = v.veic_id
+            JOIN modelos AS m ON v.mod_id = m.mod_id
+            WHERE a.agend_id = $1;
         `;
+        
         const resultMain = await pool.query(queryMain, [id]);
+        if (resultMain.rows.length === 0) return res.status(404).json({ message: 'Não encontrado' });
 
-        if (resultMain.rows.length === 0) {
-            return res.status(404).json({ message: 'Agendamento não encontrado' });
-        }
+        const appointment = resultMain.rows[0];
 
-        // Para pegar o preço e duração corretos, precisamos fazer o JOIN complexo aqui também
-        // Mas para visualização simples, pegar da tabela 'servicos' (nome) geralmente basta.
-        // Se quiser mostrar o preço histórico, teria que salvar o preço no momento do agendamento (sugestão futura).
-        // Por enquanto, vamos pegar o nome do serviço base.
+        // 2. Busca os serviços com os preços individuais daquela categoria
         const queryServices = `
-        SELECT ags.agend_serv_id, 
-               s.serv_id, 
-               s.serv_nome, 
-               sit.agend_serv_situ_nome
-          FROM agenda_servicos AS ags
-          JOIN servicos        AS s ON ags.serv_id = s.serv_id
-          JOIN agenda_servicos_situacao AS sit ON ags.agend_serv_situ_id = sit.agend_serv_situ_id
-         WHERE  ags.agend_id = $1
+            SELECT s.serv_id, s.serv_nome, stv.stv_preco, stv.stv_duracao
+            FROM agenda_servicos AS ags
+            JOIN servicos AS s ON ags.serv_id = s.serv_id
+            JOIN agendamentos AS a ON ags.agend_id = a.agend_id
+            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
+            JOIN veiculos AS v ON vu.veic_id = v.veic_id
+            JOIN modelos AS m ON v.mod_id = m.mod_id
+            JOIN marcas AS ma ON m.mar_id = ma.mar_id
+            JOIN categorias AS c ON ma.cat_id = c.cat_id
+            JOIN servicos_tipo_veiculo AS stv ON (s.serv_id = stv.serv_id AND c.tps_id = stv.tps_id)
+            WHERE ags.agend_id = $1;
         `;
+        
         const resultServices = await pool.query(queryServices, [id]);
 
         return res.json({
             status: 'success',
-            data: { ...resultMain.rows[0], servicos: resultServices.rows }
+            data: { 
+                ...appointment, 
+                servicos: resultServices.rows 
+            }
         });
 
     } catch (error) {
         next(error);
     }
 };
-
 
 export const createAppointment = async (req, res, next) => {
     const client = await pool.connect();

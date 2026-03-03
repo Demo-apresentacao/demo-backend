@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
 import {
   listServices,
@@ -83,7 +84,7 @@ router.use(verifyToken);
  *               items:
  *                 $ref: '#/components/schemas/Service'
  */
-router.get('/', listServices);
+router.get('/', checkPermission('servicos.listar'), listServices);
 
 /**
  * @swagger
@@ -127,7 +128,8 @@ router.get('/', listServices);
  *       404:
  *         description: Serviço não encontrado
  */
-router.get('/:serv_id', getServiceById);
+router.get(
+    '/:serv_id', checkPermission('servicos.visualizar'), getServiceById);
 
 /**
  * @swagger
@@ -148,7 +150,7 @@ router.get('/:serv_id', getServiceById);
  *       201:
  *         description: Serviço criado com sucesso
  */
-router.post('/', createService);
+router.post('/', checkPermission('servicos.criar'), createService);
 
 /**
  * @swagger
@@ -177,7 +179,7 @@ router.post('/', createService);
  *       404:
  *         description: Serviço não encontrado
  */
-router.patch('/:serv_id', updateService);
+router.patch('/:serv_id', checkPermission('servicos.editar'), updateService);
 
 /**
  * @swagger
@@ -200,7 +202,7 @@ router.patch('/:serv_id', updateService);
  *       404:
  *         description: Serviço não encontrado
  */
-router.patch('/:serv_id/status', toggleServiceStatus);
+router.patch('/:serv_id/status', checkPermission('servicos.alterar_status'), toggleServiceStatus);
 
 /**
  * @swagger
@@ -223,7 +225,7 @@ router.patch('/:serv_id/status', toggleServiceStatus);
  *       404:
  *         description: Serviço não encontrado
  */
-router.delete('/:serv_id', deleteService);
+router.delete('/:serv_id', checkPermission('servicos.inativar'), deleteService);
 
 /**
  * @swagger
