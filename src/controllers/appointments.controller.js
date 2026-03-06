@@ -87,26 +87,24 @@ const verificarConflito = async (client, agendData, agendHorario, serviceIds, ve
     // Mas como o agendamento já existe, ele já tem serviços salvos.
     // Para simplificar, vamos somar a duração dos serviços salvos desses agendamentos.
     const existingQuery = `
-        SELECT 
-             a.agend_id, 
-             a.agend_horario, 
-             v.veic_placa,
-             SUM(EXTRACT(EPOCH FROM stv.stv_duracao)/60) as duracao_total_min
-        FROM agendamentos     AS a
-        JOIN veiculo_usuario  AS vu ON a.veic_usu_id = vu.veic_usu_id
-        JOIN veiculos         AS v  ON vu.veic_id    = v.veic_id
-        JOIN modelos          AS m  ON v.mod_id      = m.mod_id
-        JOIN marcas           AS ma ON m.mar_id      = ma.mar_id
-        JOIN categorias       AS c  ON ma.cat_id     = c.cat_id
-        
-        LEFT JOIN agenda_servicos AS ags ON a.agend_id = ags.agend_id
-        LEFT JOIN servicos_tipo_veiculo AS stv 
-             ON ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id 
-             
-        WHERE a.agend_data = $1 
-          AND a.agend_situacao != 0 
-          ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
-        GROUP BY a.agend_id, a.agend_horario, v.veic_placa
+             SELECT 
+                  a.agend_id, 
+                  a.agend_horario, 
+                  v.veic_placa,
+                  SUM(EXTRACT(EPOCH FROM stv.stv_duracao)/60) as duracao_total_min
+             FROM agendamentos          AS a
+             JOIN veiculo_usuario       AS vu ON a.veic_usu_id = vu.veic_usu_id
+             JOIN veiculos              AS v  ON vu.veic_id    = v.veic_id
+             JOIN modelos               AS m  ON v.mod_id      = m.mod_id
+             JOIN marcas                AS ma ON m.mar_id      = ma.mar_id
+             JOIN categorias            AS c  ON ma.cat_id     = c.cat_id
+        LEFT JOIN agenda_servicos       AS ags ON a.agend_id   = ags.agend_id
+        LEFT JOIN servicos_tipo_veiculo AS stv ON ags.serv_id  = stv.serv_id 
+                                              AND c.tps_id = stv.tps_id 
+            WHERE a.agend_data = $1 
+              AND a.agend_situacao != 0 
+              ${excludeAgendId ? 'AND a.agend_id != $2' : ''} 
+         GROUP BY a.agend_id, a.agend_horario, v.veic_placa
     `;
 
     const params = excludeAgendId ? [agendData, excludeAgendId] : [agendData];
@@ -265,15 +263,15 @@ export const listAppointments = async (req, res, next) => {
 
         // QUERY ATUALIZADA COM CÁLCULO DE DURAÇÃO
         let baseQuery = `
-            FROM agendamentos AS a
-            JOIN veiculo_usuario AS vu ON a.veic_usu_id = vu.veic_usu_id
-            JOIN usuarios AS u ON vu.usu_id = u.usu_id
-            JOIN veiculos AS v ON vu.veic_id = v.veic_id
-            JOIN modelos AS m ON v.mod_id = m.mod_id
-            JOIN marcas AS ma ON m.mar_id = ma.mar_id
-            JOIN categorias AS c ON ma.cat_id = c.cat_id
-            LEFT JOIN agenda_servicos AS ags ON a.agend_id = ags.agend_id
-            LEFT JOIN servicos AS s ON ags.serv_id = s.serv_id
+                 FROM agendamentos         AS a
+                 JOIN veiculo_usuario      AS vu ON a.veic_usu_id = vu.veic_usu_id
+                 JOIN usuarios             AS u ON vu.usu_id      = u.usu_id
+                 JOIN veiculos             AS v ON vu.veic_id     = v.veic_id
+                 JOIN modelos              AS m ON v.mod_id       = m.mod_id
+                 JOIN marcas               AS ma ON m.mar_id      = ma.mar_id
+                 JOIN categorias           AS c ON ma.cat_id      = c.cat_id
+            LEFT JOIN agenda_servicos       AS ags ON a.agend_id   = ags.agend_id
+            LEFT JOIN servicos              AS s ON ags.serv_id    = s.serv_id
             LEFT JOIN servicos_tipo_veiculo AS stv ON (ags.serv_id = stv.serv_id AND c.tps_id = stv.tps_id)
         `;
 
@@ -312,7 +310,13 @@ export const listAppointments = async (req, res, next) => {
                  STRING_AGG(DISTINCT s.serv_nome, ', ') AS lista_servicos
           ${baseQuery}
           ${whereClause}
-          GROUP BY a.agend_id, a.agend_data, a.agend_horario, a.agend_situacao, a.tracking_token, v.veic_placa, u.usu_nome
+          GROUP BY a.agend_id, 
+                   a.agend_data, 
+                   a.agend_horario, 
+                   a.agend_situacao, 
+                   a.tracking_token, 
+                   v.veic_placa, 
+                   u.usu_nome
         `;
 
         queryText += ` ${orderByClause} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
