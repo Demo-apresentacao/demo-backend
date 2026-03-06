@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkPermission } from '../middlewares/checkPermission.middleware.js';
 
 import {
   listVehicleUsers,
@@ -74,7 +75,10 @@ router.use(verifyToken);
  *               items:
  *                 $ref: '#/components/schemas/VehicleUser'
  */
-router.get('/', listVehicleUsers);
+router.get(
+    '/', 
+    checkPermission('veiculo_usuarios.listar'),
+    listVehicleUsers);
 
 /**
  * @swagger
@@ -95,7 +99,10 @@ router.get('/', listVehicleUsers);
  *       200:
  *         description: Usuários vinculados ao veículo
  */
-router.get('/vehicle/:vehicleId', listUsersByVehicle);
+router.get(
+    '/vehicle/:vehicleId', 
+    checkPermission('veiculo_usuarios.listar'),
+    listUsersByVehicle);
 
 /**
  * @swagger
@@ -116,7 +123,10 @@ router.get('/vehicle/:vehicleId', listUsersByVehicle);
  *       200:
  *         description: Veículos vinculados ao usuário
  */
-router.get('/user/:userId', listVehiclesByUser);
+router.get(
+    '/user/:userId', 
+    checkPermission('veiculo_usuarios.listar'),
+    listVehiclesByUser);
 
 /**
  * @swagger
@@ -137,7 +147,10 @@ router.get('/user/:userId', listVehiclesByUser);
  *       201:
  *         description: Associação criada com sucesso
  */
-router.post('/', createVehicleUser);
+router.post(
+    '/', 
+    checkPermission('veiculo_usuarios.criar'),
+    createVehicleUser);
 
 /**
  * @swagger
@@ -164,7 +177,10 @@ router.post('/', createVehicleUser);
  *       200:
  *         description: Associação atualizada com sucesso
  */
-router.patch('/:id', updateVehicleUser);
+router.patch(
+    '/:id', 
+    checkPermission('veiculo_usuarios.editar'),
+    updateVehicleUser);
 
 /**
  * @swagger
@@ -185,6 +201,9 @@ router.patch('/:id', updateVehicleUser);
  *       200:
  *         description: Associação removida com sucesso
  */
-router.delete('/:id', deleteVehicleUser);
+router.delete(
+    '/:id', 
+    checkPermission('veiculo_usuarios.excluir'),
+    deleteVehicleUser);
 
 export default router;
