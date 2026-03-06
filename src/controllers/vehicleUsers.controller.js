@@ -26,8 +26,6 @@ export const listVehicleUsers = async (req, res, next) => {
   }
 };
 
-
-
 export const listUsersByVehicle = async (req, res, next) => {
   try {
     const { vehicleId } = req.params;
