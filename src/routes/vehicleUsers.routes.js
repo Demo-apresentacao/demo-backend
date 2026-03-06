@@ -77,7 +77,7 @@ router.use(verifyToken);
  */
 router.get(
     '/', 
-    checkPermission('veiculo_usuarios.listar'),
+    // checkPermission('veiculos_usuarios.listar'),
     listVehicleUsers);
 
 /**
@@ -101,7 +101,7 @@ router.get(
  */
 router.get(
     '/vehicle/:vehicleId', 
-    checkPermission('veiculo_usuarios.listar'),
+    // checkPermission('veiculos_usuarios.listar'),
     listUsersByVehicle);
 
 /**
@@ -125,7 +125,7 @@ router.get(
  */
 router.get(
     '/user/:userId', 
-    checkPermission('veiculo_usuarios.listar'),
+    // checkPermission('veiculos_usuarios.listar'),
     listVehiclesByUser);
 
 /**
@@ -149,7 +149,7 @@ router.get(
  */
 router.post(
     '/', 
-    checkPermission('veiculo_usuarios.criar'),
+    // checkPermission('veiculos_usuarios.criar'),
     createVehicleUser);
 
 /**
@@ -179,7 +179,7 @@ router.post(
  */
 router.patch(
     '/:id', 
-    checkPermission('veiculo_usuarios.editar'),
+    // checkPermission('veiculos_usuarios.editar'),
     updateVehicleUser);
 
 /**
@@ -203,7 +203,7 @@ router.patch(
  */
 router.delete(
     '/:id', 
-    checkPermission('veiculo_usuarios.excluir'),
+    // checkPermission('veiculos_usuarios.excluir'),
     deleteVehicleUser);
 
 export default router;
