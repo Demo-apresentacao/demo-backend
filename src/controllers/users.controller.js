@@ -373,7 +373,6 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
-
 export const getUserVehicles = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -381,11 +380,17 @@ export const getUserVehicles = async (req, res, next) => {
     const query = `
             SELECT v.veic_id, 
                    v.veic_placa, 
+                   v.veic_ano,
                    m.mod_nome, 
-                   vu.veic_usu_id
+                   vu.veic_usu_id,
+                   vu.data_inicial,
+                   vu.ehproprietario,
+                   cat.cat_nome
               FROM veiculo_usuario AS vu
-              JOIN veiculos        AS v ON vu.veic_id = v.veic_id
-              JOIN modelos         AS m ON v.mod_id   = m.mod_id
+              JOIN veiculos        AS v   ON vu.veic_id = v.veic_id
+              JOIN modelos         AS m   ON v.mod_id   = m.mod_id
+              JOIN marcas          AS ma  ON m.mar_id   = ma.mar_id
+              JOIN categorias      AS cat ON ma.cat_id  = cat.cat_id
              WHERE vu.usu_id = $1 
                AND v.veic_situacao = true
                AND vu.data_final IS NULL
