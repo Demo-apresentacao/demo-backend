@@ -2,8 +2,8 @@ import pool from '../config/db.js';
 
 
 export const listVehicleUsers = async (req, res, next) => {
-  try {
-    const query = `
+    try {
+        const query = `
         SELECT veic_usu_id,
                veic_id,
                usu_id,
@@ -14,23 +14,23 @@ export const listVehicleUsers = async (req, res, next) => {
       ORDER BY veic_usu_id DESC;
     `;
 
-    const result = await pool.query(query);
+        const result = await pool.query(query);
 
-    return res.json({
-      status: 'success',
-      data: result.rows,
-      total: result.rowCount
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({
+            status: 'success',
+            data: result.rows,
+            total: result.rowCount
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const listUsersByVehicle = async (req, res, next) => {
-  try {
-    const { vehicleId } = req.params;
+    try {
+        const { vehicleId } = req.params;
 
-    const query = `
+        const query = `
         SELECT vu.veic_usu_id,
                vu.veic_id,
                vu.usu_id,
@@ -48,33 +48,33 @@ export const listUsersByVehicle = async (req, res, next) => {
                vu.data_inicial DESC;
     `;
 
-    const result = await pool.query(query, [vehicleId]);
+        const result = await pool.query(query, [vehicleId]);
 
-    return res.json({
-      status: 'success',
-      data: result.rows,
-      total: result.rowCount
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({
+            status: 'success',
+            data: result.rows,
+            total: result.rowCount
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 
 export const listVehiclesByUser = async (req, res, next) => {
-  try {
-    const { userId } = req.params;
-    
-    const { status } = req.query; 
+    try {
+        const { userId } = req.params;
 
-    let statusCondition = '';
-    
-    if (status !== 'all') {
-        statusCondition = 'AND v.veic_situacao = TRUE';
-    }
-  
+        const { status } = req.query;
 
-    const query = `
+        let statusCondition = '';
+
+        if (status !== 'all') {
+            statusCondition = 'AND v.veic_situacao = TRUE';
+        }
+
+
+        const query = `
         SELECT vu.veic_usu_id,
                vu.data_inicial,
                vu.data_final,
@@ -100,204 +100,242 @@ export const listVehiclesByUser = async (req, res, next) => {
       ORDER BY v.veic_situacao DESC, v.veic_id DESC; 
     `;
 
-    const result = await pool.query(query, [userId]);
+        const result = await pool.query(query, [userId]);
 
-    return res.json({
-      status: 'success',
-      data: result.rows,
-      total: result.rowCount
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({
+            status: 'success',
+            data: result.rows,
+            total: result.rowCount
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 
 export const createVehicleUser = async (req, res, next) => {
-  try {
-    const { veic_id, usu_id, ehproprietario, data_inicial } = req.body;
+    try {
+        const { veic_id, usu_id, ehproprietario, data_inicial } = req.body;
 
-    if (!veic_id || !usu_id) {
-        return res.status(400).json({ status: 'error', message: 'Veículo e Usuário são obrigatórios.' });
-    }
-
-    // --- VALIDAÇÃO DE DATA (Ignora horas para permitir "hoje") ---
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Zera hora para comparação justa
-    
-    const inputDate = new Date(data_inicial);
-    // Zera hora da entrada também (caso venha com fuso)
-    inputDate.setHours(0, 0, 0, 0); 
-
-    if (inputDate > new Date()) { 
-        // Aqui comparamos com new Date() com hora cheia, ou seja, se for AMANHÃ
-        // Se for hoje, passa.
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0,0,0,0);
-        
-        if (inputDate >= tomorrow) {
-             return res.status(400).json({ status: 'error', message: 'A data inicial não pode ser futura.' });
+        if (!veic_id || !usu_id) {
+            return res.status(400).json({ status: 'error', message: 'Veículo e Usuário são obrigatórios.' });
         }
-    }
 
-    
-    const checkQuery = `
+        // --- VALIDAÇÃO DE DATA (Ignora horas para permitir "hoje") ---
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Zera hora para comparação justa
+
+        const inputDate = new Date(data_inicial);
+        // Zera hora da entrada também (caso venha com fuso)
+        inputDate.setHours(0, 0, 0, 0);
+
+        if (inputDate > new Date()) {
+            // Aqui comparamos com new Date() com hora cheia, ou seja, se for AMANHÃ
+            // Se for hoje, passa.
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+
+            if (inputDate >= tomorrow) {
+                return res.status(400).json({ status: 'error', message: 'A data inicial não pode ser futura.' });
+            }
+        }
+
+
+        const checkQuery = `
         SELECT veic_usu_id 
           FROM veiculo_usuario 
          WHERE veic_id = $1 
            AND usu_id = $2 
            AND data_final IS NULL
     `;
-    
-    const checkResult = await pool.query(checkQuery, [veic_id, usu_id]);
 
-    if (checkResult.rowCount > 0) {
-        return res.status(409).json({ // 409 Conflict
-            status: 'error',
-            message: 'Este usuário já possui um vínculo ativo com este veículo. Encerre o anterior primeiro.'
-        });
-    }
+        const checkResult = await pool.query(checkQuery, [veic_id, usu_id]);
 
-    const query = `
+        if (checkResult.rowCount > 0) {
+            return res.status(409).json({ // 409 Conflict
+                status: 'error',
+                message: 'Este usuário já possui um vínculo ativo com este veículo. Encerre o anterior primeiro.'
+            });
+        }
+
+        const query = `
       INSERT INTO veiculo_usuario
         (veic_id, usu_id, ehproprietario, data_inicial)
       VALUES ($1, $2, $3, $4)
       RETURNING *;
     `;
 
-    const result = await pool.query(query, [
-      veic_id,
-      usu_id,
-      ehproprietario || false,
-      data_inicial
-    ]);
+        const result = await pool.query(query, [
+            veic_id,
+            usu_id,
+            ehproprietario || false,
+            data_inicial
+        ]);
 
-    return res.status(201).json({
-      status: 'success',
-      message: 'Vínculo criado com sucesso.',
-      data: result.rows[0]
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.status(201).json({
+            status: 'success',
+            message: 'Vínculo criado com sucesso.',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 
 export const updateVehicleUser = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { data_inicial, data_final, ehproprietario } = req.body;
+    try {
+        const { id } = req.params;
+        const { data_inicial, data_final, ehproprietario } = req.body;
 
-    // BUSCAR O REGISTRO ATUAL
-    const currentRecordResult = await pool.query(
-      'SELECT data_inicial, data_final FROM veiculo_usuario WHERE veic_usu_id = $1',
-      [id]
-    );
+        const normalizeDate = (date) => {
+            if (!date) return null;
 
-    if (currentRecordResult.rowCount === 0) {
-      return res.status(404).json({ status: 'error', message: 'Registro não encontrado.' });
-    }
+            // Se vier como string YYYY-MM-DD
+            if (typeof date === 'string') {
+                const [year, month, day] = date.split('-');
+                return new Date(year, month - 1, day); // LOCAL ✅
+            }
 
-    const currentRecord = currentRecordResult.rows[0];
+            // Se já for Date
+            const d = new Date(date);
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        };
 
-    // PREPARAR DADOS (Mescla novo com antigo)
-    const nextDataInicial = data_inicial !== undefined ? data_inicial : currentRecord.data_inicial;
-    const nextDataFinal = data_final !== undefined ? data_final : currentRecord.data_final;
+        // 📌 BUSCAR O REGISTRO ATUAL
+        const currentRecordResult = await pool.query(
+            'SELECT data_inicial, data_final FROM veiculo_usuario WHERE veic_usu_id = $1',
+            [id]
+        );
 
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Hoje vai até o último segundo
-
-    // Validação A: Data Inicial no Futuro
-    if (nextDataInicial && new Date(nextDataInicial) > today) {
-        return res.status(400).json({ status: 'error', message: 'A Data Inicial não pode ser futura.' });
-    }
-
-    // Validação B: Data Final no Futuro
-    if (nextDataFinal && new Date(nextDataFinal) > today) {
-        return res.status(400).json({ status: 'error', message: 'A Data Final não pode ser futura.' });
-    }
-
-    // Validação C: Data Final antes da Inicial
-    if (nextDataInicial && nextDataFinal) {
-        if (new Date(nextDataFinal) < new Date(nextDataInicial)) {
-            return res.status(400).json({ status: 'error', message: 'A Data Final não pode ser anterior à Data Inicial.' });
+        if (currentRecordResult.rowCount === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Registro não encontrado.'
+            });
         }
-    }
 
-  
-    const fields = [];
-    const values = [];
-    let paramIndex = 1;
+        const currentRecord = currentRecordResult.rows[0];
 
-    if (data_inicial !== undefined) {
-      fields.push(`data_inicial = $${paramIndex++}`);
-      values.push(data_inicial);
-    }
+        // 📌 Mescla dados novos com antigos
+        const nextDataInicial =
+            data_inicial !== undefined ? data_inicial : currentRecord.data_inicial;
 
-    if (data_final !== undefined) {
-      fields.push(`data_final = $${paramIndex++}`);
-      values.push(data_final);
-    }
+        const nextDataFinal =
+            data_final !== undefined ? data_final : currentRecord.data_final;
 
-    if (ehproprietario !== undefined) {
-      fields.push(`ehproprietario = $${paramIndex++}`);
-      values.push(ehproprietario);
-    }
+        // 🔥 Normaliza tudo antes de validar
+        const dataInicialObj = normalizeDate(nextDataInicial);
+        const dataFinalObj = normalizeDate(nextDataFinal);
 
-    if (fields.length === 0) {
-      return res.status(400).json({ status: 'error', message: 'Nenhum campo enviado para atualização.' });
-    }
+        // 📅 Hoje (normalizado também)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    values.push(id);
+        // ✅ Validação A: Data Inicial no Futuro
+        if (dataInicialObj && dataInicialObj > today) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'A Data Inicial não pode ser futura.'
+            });
+        }
 
-    const query = `
+        // ✅ Validação B: Data Final no Futuro
+        if (dataFinalObj && dataFinalObj > today) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'A Data Final não pode ser futura.'
+            });
+        }
+
+        // ✅ Validação C: Data Final antes da Inicial
+        if (dataInicialObj && dataFinalObj) {
+            if (dataFinalObj < dataInicialObj) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'A Data Final não pode ser anterior à Data Inicial.'
+                });
+            }
+        }
+
+        // 📌 Montagem dinâmica do UPDATE
+        const fields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        if (data_inicial !== undefined) {
+            fields.push(`data_inicial = $${paramIndex++}`);
+            values.push(data_inicial);
+        }
+
+        if (data_final !== undefined) {
+            fields.push(`data_final = $${paramIndex++}`);
+            values.push(data_final);
+        }
+
+        if (ehproprietario !== undefined) {
+            fields.push(`ehproprietario = $${paramIndex++}`);
+            values.push(ehproprietario);
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Nenhum campo enviado para atualização.'
+            });
+        }
+
+        values.push(id);
+
+        const query = `
       UPDATE veiculo_usuario
          SET ${fields.join(', ')}
        WHERE veic_usu_id = $${paramIndex}
       RETURNING *;
     `;
 
-    const result = await pool.query(query, values);
+        const result = await pool.query(query, values);
 
-    return res.json({
-      status: 'success',
-      message: 'Vínculo atualizado com sucesso.',
-      data: result.rows[0]
-    });
-  } catch (error) {
-    next(error);
-  }
+        return res.json({
+            status: 'success',
+            message: 'Vínculo atualizado com sucesso.',
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        next(error);
+    }
 };
 
 
 export const deleteVehicleUser = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    // Verifica se existe antes
-    const check = await pool.query('SELECT veic_usu_id FROM veiculo_usuario WHERE veic_usu_id = $1', [id]);
-    if (check.rowCount === 0) {
-         return res.status(404).json({ status: 'error', message: 'Registro não encontrado.' });
-    }
+        // Verifica se existe antes
+        const check = await pool.query('SELECT veic_usu_id FROM veiculo_usuario WHERE veic_usu_id = $1', [id]);
+        if (check.rowCount === 0) {
+            return res.status(404).json({ status: 'error', message: 'Registro não encontrado.' });
+        }
 
-    await pool.query(
-      'DELETE FROM veiculo_usuario WHERE veic_usu_id = $1',
-      [id]
-    );
+        await pool.query(
+            'DELETE FROM veiculo_usuario WHERE veic_usu_id = $1',
+            [id]
+        );
 
-    return res.json({
-      status: 'success',
-      message: 'Vínculo removido com sucesso.'
-    });
-  } catch (error) {
-    // Proteção de FK: Se esse vínculo foi usado para gerar um agendamento
-    if (error.code === '23503') {
-        return res.status(409).json({ 
-            status: 'error', 
-            message: 'Não é possível excluir este vínculo pois existem agendamentos históricos ligados a ele. Tente encerrar a data final em vez de excluir.' 
+        return res.json({
+            status: 'success',
+            message: 'Vínculo removido com sucesso.'
         });
+    } catch (error) {
+        // Proteção de FK: Se esse vínculo foi usado para gerar um agendamento
+        if (error.code === '23503') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Não é possível excluir este vínculo pois existem agendamentos históricos ligados a ele. Tente encerrar a data final em vez de excluir.'
+            });
+        }
+        next(error);
     }
-    next(error);
-  }
 };

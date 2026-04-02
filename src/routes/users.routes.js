@@ -247,7 +247,9 @@ router.patch('/:id/status', checkPermission('usuarios.alterar_status'), updateUs
  *       200:
  *         description: Lista de veículos retornada com sucesso
  */
-router.get('/:id/vehicles', checkPermission('usuarios.veiculos'), getUserVehicles);
+router.get('/:id/vehicles', 
+    checkPermission('usuarios.veiculos'),
+     getUserVehicles);
 
 /**
  * ======================================================

@@ -4,14 +4,17 @@ import jwt from 'jsonwebtoken';
 
 export const login = async (req, res, next) => {
   try {
-    // 1. AJUSTE: Aceita tanto 'email' (do front) quanto 'usu_email'
+    // 1. Aceita ambos os formatos (frontend/back)
     const { email, password, usu_email, usu_senha } = req.body;
 
     const emailFinal = email || usu_email;
     const senhaFinal = password || usu_senha;
 
     if (!emailFinal || !senhaFinal) {
-      return res.status(400).json({ status: 'error', message: 'E-mail e senha são obrigatórios.' });
+      return res.status(400).json({
+        status: 'error',
+        message: 'E-mail e senha são obrigatórios.'
+      });
     }
 
     const query = `
@@ -22,62 +25,67 @@ export const login = async (req, res, next) => {
              usu_senha, 
              usu_situacao 
         FROM usuarios 
-       WHERE usu_email = $1 
+       WHERE usu_email = $1
        LIMIT 1;
     `;
 
     const result = await pool.query(query, [emailFinal]);
 
-    // 2. Se não achou o email, rejeita
+    // 3. Verifica se o usuário existe
     if (result.rowCount === 0) {
-      return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
+      return res.status(401).json({
+        status: 'error',
+        message: 'E-mail ou senha inválidos.'
+      });
     }
 
     const usuario = result.rows[0];
 
-    // --- VALIDAÇÃO DE STATUS ---
-    if (!usuario.usu_situacao) {
-        return res.status(403).json({ 
-            status: 'error', 
-            message: 'Seu usuário está inativo. Contate o administrador.' 
-        });
+    // 4. Verifica se o usuário está inativo
+    if (usuario.usu_situacao === false) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Seu usuário está inativo. Contate o administrador.'
+      });
     }
 
-    // 3. COMPARA A SENHA
+    // 5. Valida a senha
     const isMatch = await comparePassword(senhaFinal, usuario.usu_senha);
 
     if (!isMatch) {
-      return res.status(401).json({ status: 'error', message: 'E-mail ou senha inválidos.' });
+      return res.status(401).json({
+        status: 'error',
+        message: 'E-mail ou senha inválidos.'
+      });
     }
 
-    // 4. GERA O TOKEN
+    // 6. Gera o token JWT
     const token = jwt.sign(
       {
         usu_id: usuario.usu_id,
         usu_email: usuario.usu_email,
-        usu_acesso: usuario.usu_acesso  
+        usu_acesso: usuario.usu_acesso
       },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
 
-    // 5. RETORNA SUCESSO
+    // 7. Retorna sucesso
     return res.status(200).json({
       status: 'success',
       message: 'Login realizado com sucesso.',
-      token, // O Frontend vai pegar isso aqui e salvar no Cookie
+      token,
       data: {
         usu_id: usuario.usu_id,
         usu_nome: usuario.usu_nome,
         usu_email: usuario.usu_email,
         usu_acesso: usuario.usu_acesso,
-        role: usuario.usu_acesso // Adicionei 'role' para facilitar o front se precisar
+        role: usuario.usu_acesso
       }
     });
 
   } catch (error) {
-    // 6. AJUSTE: Usa o next(error) para o middleware do app.js pegar
-    console.error("Erro no login:", error);
+    console.error('Erro no login:', error);
     next(error);
   }
 };
