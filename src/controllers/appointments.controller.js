@@ -466,10 +466,10 @@ export const createAppointment = async (req, res, next) => {
         }
 
         // Validação de Conflito (Agora passando o veic_usu_id)
-        const servicesToCheck = (services && services.length > 0) ? services : [];
+        //const servicesToCheck = (services && services.length > 0) ? services : [];
         
         // --- MUDANÇA AQUI: Passamos veic_usu_id ---
-        await verificarConflito(client, agend_data, agend_horario, servicesToCheck, veic_usu_id);
+        //await verificarConflito(client, agend_data, agend_horario, servicesToCheck, veic_usu_id);
 
         await client.query('BEGIN');
 
@@ -507,11 +507,11 @@ export const createAppointment = async (req, res, next) => {
     } catch (error) {
         await client.query('ROLLBACK');
 
-        if (error.message.includes("Conflito de horário") ||
-            error.message.includes("Fora do expediente") ||
-            error.message.includes("Horário de Almoço")) {
-            return res.status(400).json({ status: 'error', message: error.message });
-        }
+        // if (error.message.includes("Conflito de horário") ||
+        //     error.message.includes("Fora do expediente") ||
+        //     error.message.includes("Horário de Almoço")) {
+        //     return res.status(400).json({ status: 'error', message: error.message });
+        // }
         next(error);
     } finally {
         client.release();
@@ -537,24 +537,24 @@ export const updateAppointment = async (req, res, next) => {
         const hasServicesChange = (updates.services && Array.isArray(updates.services));
         const hasVehicleChange = (updates.veic_usu_id); // Se mudar o veículo, muda a duração!
 
-        if (hasTimeChange || hasServicesChange || hasVehicleChange) {
-            const dateToCheck = updates.agend_data || currentData.agend_data; 
-            const timeToCheck = updates.agend_horario || currentData.agend_horario;
-            const vehicleToCheck = updates.veic_usu_id || currentData.veic_usu_id; // Importante pegar o veículo atual se não mudou
+        // if (hasTimeChange || hasServicesChange || hasVehicleChange) {
+        //     const dateToCheck = updates.agend_data || currentData.agend_data; 
+        //     const timeToCheck = updates.agend_horario || currentData.agend_horario;
+        //     const vehicleToCheck = updates.veic_usu_id || currentData.veic_usu_id; // Importante pegar o veículo atual se não mudou
 
-            let servicesToCheck = [];
-            if (hasServicesChange) {
-                servicesToCheck = updates.services;
-            } else {
-                const currentServicesRes = await client.query(
-                    `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`, [id]
-                );
-                servicesToCheck = currentServicesRes.rows.map(row => row.serv_id);
-            }
+        //     let servicesToCheck = [];
+        //     if (hasServicesChange) {
+        //         servicesToCheck = updates.services;
+        //     } else {
+        //         const currentServicesRes = await client.query(
+        //             `SELECT serv_id FROM agenda_servicos WHERE agend_id = $1`, [id]
+        //         );
+        //         servicesToCheck = currentServicesRes.rows.map(row => row.serv_id);
+        //     }
 
-            // --- MUDANÇA AQUI: Passamos vehicleToCheck ---
-            await verificarConflito(client, dateToCheck, timeToCheck, servicesToCheck, vehicleToCheck, id);
-        }
+        //     // --- MUDANÇA AQUI: Passamos vehicleToCheck ---
+        //     await verificarConflito(client, dateToCheck, timeToCheck, servicesToCheck, vehicleToCheck, id);
+        // }
 
         await client.query('BEGIN');
 
@@ -602,11 +602,11 @@ export const updateAppointment = async (req, res, next) => {
     } catch (error) {
         await client.query('ROLLBACK');
 
-        if (error.message.includes("Conflito de horário") ||
-            error.message.includes("Fora do expediente") ||
-            error.message.includes("Horário de Almoço")) {
-            return res.status(400).json({ status: 'error', message: error.message });
-        }
+        // if (error.message.includes("Conflito de horário") ||
+        //     error.message.includes("Fora do expediente") ||
+        //     error.message.includes("Horário de Almoço")) {
+        //     return res.status(400).json({ status: 'error', message: error.message });
+        // }
         next(error);
     } finally {
         client.release();
